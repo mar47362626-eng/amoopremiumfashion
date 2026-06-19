@@ -922,6 +922,16 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
         status,
         orders[orderIndex].items
       ).catch(error => console.error('Email sending error (non-critical):', error.message));
+      
+      // Send order status SMS
+      if (orders[orderIndex].phone) {
+        sendOrderStatusSMS(
+          orders[orderIndex].phone,
+          orders[orderIndex].customerName,
+          orders[orderIndex].id,
+          status
+        ).catch(error => console.error('SMS sending error (non-critical):', error.message));
+      }
     }
 
     console.log('✅ Order status updated:', req.params.orderId, '→', status);
