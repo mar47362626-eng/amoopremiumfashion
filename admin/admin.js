@@ -730,15 +730,20 @@ function displayCustomersList(users) {
     .map(user => user.email)
     .filter(email => email && email.includes('@'));
 
-  if (validEmails.length === 0) {
-    list.innerHTML = '<p style="color: #999; text-align: center;">No customer emails found</p>';
+  const validPhones = users
+    .map(user => user.phone)
+    .filter(phone => phone && phone.trim().length > 0);
+
+  if (validEmails.length === 0 && validPhones.length === 0) {
+    list.innerHTML = '<p style="color: #999; text-align: center;">No customer contacts found</p>';
     return;
   }
 
   // Display customers with name, email, and phone
   const htmlContent = `
     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
-      <strong style="color: #333;">👥 Total Customers: ${users.length}</strong>
+      <strong style="color: #333;">👥 Total Customers: ${users.length}</strong><br/>
+      <small style="color: #666;">📧 ${validEmails.length} emails | 📱 ${validPhones.length} phone numbers</small>
     </div>
     ${users
       .map(
@@ -757,16 +762,18 @@ function displayCustomersList(users) {
   if (customersList) customersList.innerHTML = htmlContent;
   if (messagesCustomersList) messagesCustomersList.innerHTML = htmlContent;
 
-  // Store emails for message sending
+  // Store emails and phones for message sending
   window.customerEmails = validEmails;
-  console.log(`✅ Loaded ${validEmails.length} customer emails for messaging`);
+  window.customerPhones = validPhones;
+  console.log(`✅ Loaded ${validEmails.length} customer emails and ${validPhones.length} phone numbers for messaging`);
 }
 
 // Handle message form submission
 document.getElementById('send-message-form').addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  if (!window.customerEmails || window.customerEmails.length === 0) {
+  if ((!window.customerEmails || window.customerEmails.length === 0) && 
+      (!window.customerPhones || window.customerPhones.length === 0)) {
     showMessageError('No customers to send message to');
     return;
   }
@@ -779,8 +786,9 @@ document.getElementById('send-message-form').addEventListener('submit', async (e
     return;
   }
 
+  const totalRecipients = (window.customerEmails?.length || 0) + (window.customerPhones?.length || 0);
   const confirmSend = confirm(
-    `Send this message to ${window.customerEmails.length} customer(s)?\n\nSubject: ${subject}`
+    `Send this message to ${totalRecipients} customer(s)?\n\nEmails: ${window.customerEmails?.length || 0}\nPhone numbers: ${window.customerPhones?.length || 0}\n\nSubject: ${subject}`
   );
 
   if (!confirmSend) return;
@@ -793,7 +801,8 @@ document.getElementById('send-message-form').addEventListener('submit', async (e
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        emails: window.customerEmails,
+        emails: window.customerEmails || [],
+        phones: window.customerPhones || [],
         subject,
         message,
         senderName: 'Amoo Store',
@@ -804,8 +813,8 @@ document.getElementById('send-message-form').addEventListener('submit', async (e
     if (response.ok) {
       const result = await response.json();
       let successMsg = `✅ ${result.message}`;
-      if (result.sentCount !== undefined && result.failedCount !== undefined) {
-        successMsg = `✅ Message sent: ${result.sentCount} succeeded${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`;
+      if (result.emailsSent !== undefined && result.smsSent !== undefined) {
+        successMsg = `✅ Message sent: ${result.emailsSent} emails, ${result.smsSent} SMS${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`;
       }
       showMessageSuccess(successMsg);
       document.getElementById('send-message-form').reset();
