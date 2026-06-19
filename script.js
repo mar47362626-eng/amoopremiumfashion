@@ -1058,29 +1058,30 @@ revealElements.forEach((element) => observer.observe(element));
 
 // Country to ZIP format mapping
 const countryZipFormats = {
-  'Nigeria': { format: '100001', example: 'Nigerian: 100001' },
-  'United States': { format: '12345', example: 'US: 12345' },
-  'Canada': { format: 'K1A 0B1', example: 'Canada: K1A 0B1' },
-  'United Kingdom': { format: 'SW1A 1AA', example: 'UK: SW1A 1AA' },
-  'Germany': { format: '10115', example: 'Germany: 10115' },
-  'France': { format: '75001', example: 'France: 75001' },
-  'Italy': { format: '00100', example: 'Italy: 00100' },
-  'Spain': { format: '28001', example: 'Spain: 28001' },
-  'Australia': { format: '2000', example: 'Australia: 2000' },
-  'India': { format: '110001', example: 'India: 110001' },
-  'Ghana': { format: 'GA 100 100', example: 'Ghana: GA 100 100' },
-  'Kenya': { format: '00100', example: 'Kenya: 00100' },
-  'South Africa': { format: '0001', example: 'South Africa: 0001' },
-  'Egypt': { format: '11511', example: 'Egypt: 11511' },
-  'Japan': { format: '100-0001', example: 'Japan: 100-0001' },
-  'China': { format: '100000', example: 'China: 100000' },
-  'Brazil': { format: '01310-100', example: 'Brazil: 01310-100' },
-  'Mexico': { format: '06500', example: 'Mexico: 06500' }
+  'Nigeria': { format: '100001', example: 'Nigerian: 100001', phone: '+2349012345678' },
+  'United States': { format: '12345', example: 'US: 12345', phone: '+12015550123' },
+  'Canada': { format: 'K1A 0B1', example: 'Canada: K1A 0B1', phone: '+14165551234' },
+  'United Kingdom': { format: 'SW1A 1AA', example: 'UK: SW1A 1AA', phone: '+447911123456' },
+  'Germany': { format: '10115', example: 'Germany: 10115', phone: '+491234567890' },
+  'France': { format: '75001', example: 'France: 75001', phone: '+33123456789' },
+  'Italy': { format: '00100', example: 'Italy: 00100', phone: '+393912345678' },
+  'Spain': { format: '28001', example: 'Spain: 28001', phone: '+34912345678' },
+  'Australia': { format: '2000', example: 'Australia: 2000', phone: '+61212345678' },
+  'India': { format: '110001', example: 'India: 110001', phone: '+919876543210' },
+  'Ghana': { format: 'GA 100 100', example: 'Ghana: GA 100 100', phone: '+233201234567' },
+  'Kenya': { format: '00100', example: 'Kenya: 00100', phone: '+254701234567' },
+  'South Africa': { format: '0001', example: 'South Africa: 0001', phone: '+27123456789' },
+  'Egypt': { format: '11511', example: 'Egypt: 11511', phone: '+201001234567' },
+  'Japan': { format: '100-0001', example: 'Japan: 100-0001', phone: '+81312345678' },
+  'China': { format: '100000', example: 'China: 100000', phone: '+8610123456789' },
+  'Brazil': { format: '01310-100', example: 'Brazil: 01310-100', phone: '+551123456789' },
+  'Mexico': { format: '06500', example: 'Mexico: 06500', phone: '+525512345678' }
 };
 
 // Handle country selection change
 const countrySelect = document.getElementById('country-select');
 const zipInput = document.getElementById('zip-input');
+const phoneInput = document.getElementById('phone-input');
 
 if (countrySelect && zipInput) {
   countrySelect.addEventListener('change', (event) => {
@@ -1089,14 +1090,28 @@ if (countrySelect && zipInput) {
     if (selectedCountry && countryZipFormats[selectedCountry]) {
       zipInput.placeholder = countryZipFormats[selectedCountry].example;
       zipInput.setAttribute('data-country', selectedCountry);
+      
+      // Update phone placeholder too
+      if (phoneInput) {
+        phoneInput.placeholder = `e.g. ${countryZipFormats[selectedCountry].phone}`;
+        phoneInput.setAttribute('data-country', selectedCountry);
+      }
     } else {
       zipInput.placeholder = 'Postal / ZIP code';
       zipInput.removeAttribute('data-country');
+      
+      if (phoneInput) {
+        phoneInput.placeholder = 'e.g. +2348012345678';
+        phoneInput.removeAttribute('data-country');
+      }
     }
   });
   
   // Set initial placeholder if a country is already selected
   if (countrySelect.value && countryZipFormats[countrySelect.value]) {
     zipInput.placeholder = countryZipFormats[countrySelect.value].example;
+    if (phoneInput) {
+      phoneInput.placeholder = `e.g. ${countryZipFormats[countrySelect.value].phone}`;
+    }
   }
 }
