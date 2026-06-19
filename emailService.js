@@ -401,11 +401,103 @@ async function sendCustomerMessageEmail(senderName, senderEmail, subject, messag
   }
 }
 
+// Send admin order notification
+async function sendAdminOrderNotification(recipientEmail, orderId, customerName, customerEmail, items, total, subtotal, deliveryFee) {
+  try {
+    const itemsList = items.map(item => `<li>${item.productName} x${item.quantity} - ₦${(item.price * item.quantity).toLocaleString()}</li>`).join('');
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; color: #333;">
+        <h2 style="color: #2c3e50;">📦 New Order Received!</h2>
+        <p>A new order has been placed on AMOO STORE.</p>
+        
+        <hr style="border: 1px solid #ddd;">
+        
+        <h3>Order Details</h3>
+        <p><strong>Order ID:</strong> #${orderId}</p>
+        <p><strong>Customer:</strong> ${customerName}</p>
+        <p><strong>Email:</strong> ${customerEmail}</p>
+        
+        <h3>Items Ordered</h3>
+        <ul>${itemsList}</ul>
+        
+        <h3>Order Summary</h3>
+        <p><strong>Subtotal:</strong> ₦${subtotal.toLocaleString()}</p>
+        <p><strong>Delivery Fee:</strong> ₦${deliveryFee.toLocaleString()}</p>
+        <p><strong>Total:</strong> <span style="color: #e74c3c; font-size: 18px;">₦${total.toLocaleString()}</span></p>
+        
+        <hr style="border: 1px solid #ddd;">
+        
+        <p><a href="https://amoo-store-user.onrender.com/admin" style="background: #e74c3c; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">View in Admin Panel</a></p>
+        
+        <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
+      </div>
+    `;
+    
+    const text = `New Order #${orderId} from ${customerName} (${customerEmail})\n\nTotal: ₦${total.toLocaleString()}\n\nLog in to admin panel to view details.`;
+    
+    const result = await sendEmailViaBrevo(
+      recipientEmail,
+      `🔔 New Order #${orderId} from ${customerName}`,
+      html,
+      text
+    );
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ Failed to send admin order notification to ${recipientEmail}:`, error.message);
+    throw error;
+  }
+}
+
+// Send admin message notification
+async function sendAdminMessageNotification(recipientEmail, senderName, messageContent) {
+  try {
+    const html = `
+      <div style="font-family: Arial, sans-serif; color: #333;">
+        <h2 style="color: #2c3e50;">💬 New Customer Message</h2>
+        <p>A customer has sent a message through AMOO STORE.</p>
+        
+        <hr style="border: 1px solid #ddd;">
+        
+        <h3>Message Details</h3>
+        <p><strong>From:</strong> ${senderName}</p>
+        <p><strong>Message:</strong></p>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+          <p>${messageContent}</p>
+        </div>
+        
+        <hr style="border: 1px solid #ddd;">
+        
+        <p><a href="https://amoo-store-user.onrender.com/admin" style="background: #3498db; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">Reply in Admin Panel</a></p>
+        
+        <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
+      </div>
+    `;
+    
+    const text = `New Message from ${senderName}\n\n${messageContent}\n\nLog in to admin panel to reply.`;
+    
+    const result = await sendEmailViaBrevo(
+      recipientEmail,
+      `🔔 New Message from ${senderName}`,
+      html,
+      text
+    );
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ Failed to send admin message notification to ${recipientEmail}:`, error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   sendEmailViaBrevo,
   sendUserRegistrationEmail,
   sendOrderConfirmationEmail,
   sendOrderStatusUpdateEmail,
   sendAdminRegistrationEmail,
-  sendCustomerMessageEmail
+  sendCustomerMessageEmail,
+  sendAdminOrderNotification,
+  sendAdminMessageNotification
 };
