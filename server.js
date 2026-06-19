@@ -6,6 +6,7 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
 const { sendUserRegistrationEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail, sendAdminRegistrationEmail, sendCustomerMessageEmail } = require('./emailService');
+const { sendRegistrationSMS, sendOrderConfirmationSMS, sendOrderStatusSMS } = require('./smsService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -504,7 +505,7 @@ app.delete('/api/products/:id', async (req, res) => {
 });
 
 // POST user registration
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { name, email, phone, address, country, zip, password } = req.body;
 
   // Validate required fields
@@ -543,6 +544,10 @@ app.post('/api/register', (req, res) => {
     // Send registration email
     sendUserRegistrationEmail(newUser.name, newUser.email)
       .catch(error => console.error('Email sending error (non-critical):', error.message));
+    
+    // Send registration SMS
+    sendRegistrationSMS(newUser.phone, newUser.name)
+      .catch(error => console.error('SMS sending error (non-critical):', error.message));
     
     res.status(201).json({ success: true, message: 'User registered successfully', userId: newUser.id });
   } else {
@@ -713,7 +718,7 @@ app.get('/api/orders/:customerEmail', (req, res) => {
 });
 
 // POST create new order
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const { id, customerId, customerName, customerEmail, phone, address, items, subtotal, delivery, total, status, paymentMethod, createdAt } = req.body;
 
   if (!customerEmail || !items || !total) {
@@ -753,6 +758,12 @@ app.post('/api/orders', (req, res) => {
       newOrder.subtotal || 0
     ).catch(error => console.error('Email sending error (non-critical):', error.message));
     
+    // Send order confirmation SMS
+    if (phone) {
+      sendOrderConfirmationSMS(phone, customerName, newOrder.id, total)
+        .catch(error => console.error('SMS sending error (non-critical):', error.message));
+    }
+    
     res.status(201).json({ success: true, order: newOrder });
   } else {
     res.status(500).json({ error: 'Failed to save order' });
@@ -760,7 +771,7 @@ app.post('/api/orders', (req, res) => {
 });
 
 // PUT update order status (admin only)
-app.put('/api/orders/:orderId', (req, res) => {
+app.put('/api/orders/:orderId', async (req, res) => {
   const { status } = req.body;
   if (!status) {
     return res.status(400).json({ error: 'Status is required' });
@@ -786,6 +797,16 @@ app.put('/api/orders/:orderId', (req, res) => {
       status,
       orders[orderIndex].items
     ).catch(error => console.error('Email sending error (non-critical):', error.message));
+    
+    // Send order status SMS
+    if (orders[orderIndex].phone) {
+      sendOrderStatusSMS(
+        orders[orderIndex].phone,
+        orders[orderIndex].customerName,
+        orders[orderIndex].id,
+        status
+      ).catch(error => console.error('SMS sending error (non-critical):', error.message));
+    }
     
     res.json({ success: true, order: orders[orderIndex] });
   } else {
