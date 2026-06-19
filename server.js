@@ -505,6 +505,130 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
+// Get all registered admin emails
+function getAdminEmails() {
+  try {
+    const admins = readJSON(adminUserFilePath);
+    return admins.map(admin => admin.email);
+  } catch (error) {
+    console.error('Error reading admin emails:', error.message);
+    return [];
+  }
+}
+
+// Send order notification to all admins
+async function sendAdminOrderNotification(order) {
+  const adminEmails = getAdminEmails();
+  
+  if (adminEmails.length === 0) {
+    console.log('⚠️ No admin emails configured for notifications');
+    return;
+  }
+
+  const orderItemsList = order.items
+    .map(item => `<li>${item.productName} x${item.quantity} - ₦${(item.price * item.quantity).toLocaleString()}</li>`)
+    .join('');
+
+  const emailBody = `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <h2 style="color: #2c3e50;">📦 New Order Received!</h2>
+      <p>A new order has been placed on AMOO STORE.</p>
+      
+      <hr style="border: 1px solid #ddd;">
+      
+      <h3>Order Details</h3>
+      <p><strong>Order ID:</strong> #${order.id}</p>
+      <p><strong>Customer:</strong> ${order.customerName}</p>
+      <p><strong>Email:</strong> ${order.customerEmail}</p>
+      <p><strong>Phone:</strong> ${order.phone || 'N/A'}</p>
+      <p><strong>Address:</strong> ${order.address || 'N/A'}</p>
+      
+      <h3>Items Ordered</h3>
+      <ul>${orderItemsList}</ul>
+      
+      <h3>Order Summary</h3>
+      <p><strong>Subtotal:</strong> ₦${(order.subtotal || 0).toLocaleString()}</p>
+      <p><strong>Delivery Fee:</strong> ₦${(order.delivery || 0).toLocaleString()}</p>
+      <p><strong>Total:</strong> <span style="color: #e74c3c; font-size: 18px;">₦${order.total.toLocaleString()}</span></p>
+      
+      <p><strong>Payment Method:</strong> ${order.paymentMethod || 'Bank Transfer'}</p>
+      <p><strong>Status:</strong> ${order.status || 'PENDING'}</p>
+      
+      <hr style="border: 1px solid #ddd;">
+      
+      <p><a href="https://amoo-store-user.onrender.com/admin" style="background: #e74c3c; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">View in Admin Panel</a></p>
+      
+      <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
+    </div>
+  `;
+
+  for (const adminEmail of adminEmails) {
+    try {
+      await sendCustomerMessageEmail(
+        adminEmail,
+        'New Order #' + order.id,
+        emailBody,
+        true // isAdmin flag
+      ).catch(err => {
+        console.error(`⚠️ Failed to send admin notification to ${adminEmail}:`, err.message);
+      });
+    } catch (error) {
+      console.error(`Error sending to ${adminEmail}:`, error.message);
+    }
+  }
+  
+  console.log(`✅ Order notification sent to ${adminEmails.length} admin(s)`);
+}
+
+// Send message notification to all admins
+async function sendAdminMessageNotification(sender, message) {
+  const adminEmails = getAdminEmails();
+  
+  if (adminEmails.length === 0) {
+    console.log('⚠️ No admin emails configured for message notifications');
+    return;
+  }
+
+  const emailBody = `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <h2 style="color: #2c3e50;">💬 New Customer Message</h2>
+      <p>A customer has sent a message through AMOO STORE.</p>
+      
+      <hr style="border: 1px solid #ddd;">
+      
+      <h3>Message Details</h3>
+      <p><strong>From:</strong> ${sender}</p>
+      <p><strong>Message:</strong></p>
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db;">
+        <p>${message}</p>
+      </div>
+      
+      <hr style="border: 1px solid #ddd;">
+      
+      <p><a href="https://amoo-store-user.onrender.com/admin" style="background: #3498db; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">Reply in Admin Panel</a></p>
+      
+      <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
+    </div>
+  `;
+
+  for (const adminEmail of adminEmails) {
+    try {
+      await sendCustomerMessageEmail(
+        adminEmail,
+        'New Message from ' + sender,
+        emailBody,
+        true // isAdmin flag
+      ).catch(err => {
+        console.error(`⚠️ Failed to send message notification to ${adminEmail}:`, err.message);
+      });
+    } catch (error) {
+      console.error(`Error sending to ${adminEmail}:`, error.message);
+    }
+  }
+  
+  console.log(`✅ Message notification sent to ${adminEmails.length} admin(s)`);
+}
+
 // POST user registration
 app.post('/api/register', async (req, res) => {
   const { name, email, phone, address, country, zip, password } = req.body;
@@ -764,6 +888,10 @@ app.post('/api/orders', async (req, res) => {
       newOrder.delivery || 0,
       newOrder.subtotal || 0
     ).catch(error => console.error('Email sending error (non-critical):', error.message));
+    
+    // Send admin notification about new order
+    sendAdminOrderNotification(newOrder)
+      .catch(error => console.error('Admin notification error (non-critical):', error.message));
     
     // Send order confirmation SMS (DISABLED - Need Nigerian Twilio number)
     // if (phone) {
