@@ -19,6 +19,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Log Supabase connection status
 console.log('✅ Supabase initialized:', supabaseUrl ? 'Connected' : 'Not configured');
+console.log('🚀 API Version 2.1 - Rider notification endpoint included');
 
 // Middleware
 app.use(cors());
