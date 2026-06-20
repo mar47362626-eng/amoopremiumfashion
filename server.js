@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
-const { sendEmailViaBrevo, sendUserRegistrationEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail, sendAdminRegistrationEmail, sendRiderRegistrationEmail, sendCustomerMessageEmail, sendAdminOrderNotification, sendAdminMessageNotification } = require('./emailService');
+const { sendEmailViaBrevo, sendUserRegistrationEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail, sendAdminRegistrationEmail, sendRiderRegistrationEmail, sendCustomerMessageEmail, sendAdminOrderNotification, sendAdminMessageNotification, sendOrderNotificationToRider } = require('./emailService');
 const { sendRegistrationSMS, sendOrderConfirmationSMS, sendOrderStatusSMS } = require('./smsService');
 const { sendRegistrationWhatsApp, sendOrderConfirmationWhatsApp, sendOrderStatusWhatsApp, sendBulkWhatsApp } = require('./whatsappService');
 
@@ -1021,24 +1021,23 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       orders[orderIndex].status = status;
       writeJSON(ordersFilePath, orders);
       
-      // If status is "shipped", create entries in rider_orders table for ALL online riders
+      // If status is "shipped", create entries in rider_orders table for ALL registered riders
       if (status === 'shipped') {
         try {
-          console.log('🏍️ Creating rider_orders entries for all online riders...');
+          console.log('🏍️ Creating rider_orders entries for all registered riders...');
           
-          // Get all online riders from Supabase
-          const { data: onlineRiders, error: ridersError } = await supabase
+          // Get ALL riders from Supabase (not just online)
+          const { data: allRiders, error: ridersError } = await supabase
             .from('riders')
-            .select('*')
-            .eq('is_online', true);
+            .select('*');
           
           if (ridersError) {
-            console.warn('⚠️ Failed to fetch online riders:', ridersError.message);
-          } else if (onlineRiders && onlineRiders.length > 0) {
-            console.log(`📢 Found ${onlineRiders.length} online riders`);
+            console.warn('⚠️ Failed to fetch riders:', ridersError.message);
+          } else if (allRiders && allRiders.length > 0) {
+            console.log(`📢 Found ${allRiders.length} registered riders`);
             
-            // Create an entry for each online rider with full order details
-            const riderOrderEntries = onlineRiders.map((rider) => ({
+            // Create an entry for each rider with full order details
+            const riderOrderEntries = allRiders.map((rider) => ({
               order_id: req.params.orderId,
               rider_id: rider.id,
               customer_name: orders[orderIndex].customerName || orders[orderIndex].customer_name || 'Unknown',
@@ -1065,9 +1064,27 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
               console.warn('⚠️ Failed to create rider_orders entries:', insertError.message);
             } else {
               console.log(`✅ Created ${insertedEntries?.length || riderOrderEntries.length} rider_orders entries with full order details`);
+              
+              // Send notification emails to ALL riders
+              console.log('📧 Sending order notifications to all riders...');
+              const emailPromises = allRiders.map((rider) =>
+                sendOrderNotificationToRider(
+                  rider.name || 'Rider',
+                  rider.email || rider.phone,
+                  orders[orderIndex],
+                  rider.phone
+                ).catch(error => {
+                  console.warn(`⚠️ Failed to notify rider ${rider.id}:`, error.message);
+                  return null;
+                })
+              );
+              
+              const results = await Promise.allSettled(emailPromises);
+              const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+              console.log(`📧 Order notifications sent to ${successCount}/${allRiders.length} riders`);
             }
           } else {
-            console.log('⚠️ No online riders available to assign order');
+            console.log('⚠️ No riders registered in the system');
           }
         } catch (riderOrderError) {
           console.warn('⚠️ Error managing rider_orders:', riderOrderError.message);
@@ -1625,14 +1642,22 @@ app.post('/api/rider/login', (req, res) => {
 });
 
 // GET Rider Data
-app.get('/api/rider/:riderId', (req, res) => {
-  const riders = readJSON(riderFilePath);
-  const rider = riders.find((r) => r.id === req.params.riderId);
+app.get('/api/rider/:riderId', async (req, res) => {
+  try {
+    const { data: rider, error } = await supabase
+      .from('riders')
+      .select('*')
+      .eq('id', req.params.riderId)
+      .single();
 
-  if (rider) {
+    if (error || !rider) {
+      return res.status(404).json({ error: 'Rider not found' });
+    }
+
     res.json(rider);
-  } else {
-    res.status(404).json({ error: 'Rider not found' });
+  } catch (error) {
+    console.error('Error fetching rider:', error);
+    res.status(500).json({ error: 'Failed to fetch rider data' });
   }
 });
 
@@ -2069,6 +2094,31 @@ app.get('/api/rider/:riderId/completed-orders', (req, res) => {
   const completedOrders = orders.filter((o) => o.riderId === req.params.riderId && o.status === 'delivered');
 
   res.json(completedOrders);
+});
+
+// GET Available orders for riders from rider_orders table
+app.get('/api/rider-orders/available', async (req, res) => {
+  try {
+    console.log('📋 Fetching available orders from rider_orders table...');
+    
+    // Fetch from Supabase rider_orders table where status is 'assigned'
+    const { data: availableOrders, error } = await supabase
+      .from('rider_orders')
+      .select('*')
+      .eq('status', 'assigned')
+      .order('assigned_at', { ascending: false });
+    
+    if (error) {
+      console.warn('⚠️ Failed to fetch available orders from Supabase:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch available orders' });
+    }
+    
+    console.log(`✅ Fetched ${availableOrders?.length || 0} available orders from rider_orders table`);
+    res.json(availableOrders || []);
+  } catch (error) {
+    console.error('❌ Error fetching available orders:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST Notify riders about available order

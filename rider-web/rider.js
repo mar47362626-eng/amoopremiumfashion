@@ -357,32 +357,33 @@ function switchPage(pageName) {
 async function loadAvailableOrders() {
     try {
         const token = localStorage.getItem('riderToken');
-        // Fetch available orders from order_riders table (not yet assigned to any rider)
-        const response = await fetch(`${API_BASE}/api/order-riders/available`, {
+        // Fetch available orders from rider_orders table
+        const response = await fetch(`${API_BASE}/api/rider-orders/available`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
-            const orderRiders = await response.json();
-            // Map order_riders data to orders format
-            orders = orderRiders.map(ord => {
-                // Data might be nested in 'orders' object or flat
-                const orderData = ord.orders || ord;
-                return {
-                    id: ord.order_id || ord.id,
-                    orderId: ord.order_id || ord.id,
-                    riderAssignmentId: ord.id || ord.riderAssignmentId,
-                    customerName: orderData.customerName || 'Unknown',
-                    customerPhone: orderData.customerPhone || 'N/A',
-                    customerEmail: orderData.customerEmail || 'N/A',
-                    items: (orderData.items && Array.isArray(orderData.items)) ? orderData.items : [],
-                    total: orderData.total || 0,
-                    address: orderData.address || orderData.deliveryAddress || 'N/A',
-                    distance: orderData.distance || 0,
-                    paymentMethod: orderData.paymentMethod || 'N/A',
-                    status: 'available'
-                };
-            });
+            const riderOrders = await response.json();
+            // Map rider_orders data directly
+            orders = riderOrders.map(riderOrder => ({
+                id: riderOrder.order_id,
+                orderId: riderOrder.order_id,
+                riderOrderId: riderOrder.id,
+                riderAssignmentId: riderOrder.id,
+                customerId: riderOrder.rider_id,
+                customerName: riderOrder.customer_name || 'Unknown',
+                customerPhone: riderOrder.customer_phone || 'N/A',
+                customerEmail: riderOrder.customer_email || 'N/A',
+                items: (riderOrder.order_items && Array.isArray(riderOrder.order_items)) ? riderOrder.order_items : [],
+                total: riderOrder.order_total || 0,
+                address: riderOrder.delivery_address || 'N/A',
+                city: riderOrder.delivery_city || '',
+                state: riderOrder.delivery_state || '',
+                distance: 0,
+                paymentMethod: 'Pending',
+                status: 'available',
+                assignedAt: riderOrder.assigned_at
+            }));
             displayAvailableOrders();
             updateDashboardStats();
         }

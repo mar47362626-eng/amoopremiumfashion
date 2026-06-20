@@ -570,6 +570,92 @@ async function sendAdminMessageNotification(recipientEmail, senderName, messageC
   }
 }
 
+// Email template for rider order notification
+function getRiderOrderNotificationTemplate(riderName, order) {
+  const itemsHTML = (order.items || []).map(item => `
+    <tr style="border-bottom: 1px solid #eee;">
+      <td style="padding: 10px; color: #666;">
+        ${item.productImage ? `<img src="${item.productImage}" alt="${item.productName}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 5px; margin-right: 10px; display: inline-block;">` : ''}
+        <span>${item.productName}</span>
+      </td>
+      <td style="padding: 10px; text-align: center; color: #666;">x${item.quantity}</td>
+      <td style="padding: 10px; text-align: right; color: #666;">₦${(item.price * item.quantity).toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  return {
+    subject: `🚚 New Order Available for Delivery - Order #${order.id}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+        <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <h2 style="color: #27ae60; margin-bottom: 20px;">🎉 New Order Available for You, ${riderName}!</h2>
+          
+          <p style="color: #666; font-size: 16px; line-height: 1.6;">
+            A new order is ready for delivery. Review the details below and accept the order in your dashboard.
+          </p>
+          
+          <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 5px 0; color: #333;"><strong>Order ID:</strong> ${order.id}</p>
+            <p style="margin: 5px 0; color: #333;"><strong>Order Total:</strong> ₦${order.total.toLocaleString()}</p>
+            <p style="margin: 5px 0; color: #333;"><strong>Posted:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <h3 style="color: #333; margin-top: 20px; margin-bottom: 10px;">📦 Order Items:</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 10px; text-align: left; color: #333;">Product</th>
+                <th style="padding: 10px; text-align: center; color: #333;">Qty</th>
+                <th style="padding: 10px; text-align: right; color: #333;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHTML}
+            </tbody>
+          </table>
+          
+          <h3 style="color: #333; margin-top: 20px; margin-bottom: 10px;">👤 Customer Details:</h3>
+          <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">
+            <p style="margin: 5px 0; color: #666;"><strong>Name:</strong> ${order.customerName || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #666;"><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #666;"><strong>Email:</strong> ${order.customerEmail || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #666;"><strong>Delivery Address:</strong> ${order.deliveryAddress || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #666;"><strong>City/State:</strong> ${order.deliveryCity || ''} ${order.deliveryState || ''}</p>
+          </div>
+          
+          <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-top: 20px; border-left: 4px solid #3498db;">
+            <p style="margin: 5px 0; color: #333;"><strong>📍 Action Required:</strong></p>
+            <p style="margin: 5px 0; color: #555;">Log in to your rider dashboard to accept or decline this order.</p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+            This is an automated order notification from Amoo Store. Please do not reply to this email.
+          </p>
+        </div>
+      </div>
+    `,
+    text: `New Order Available for Delivery\n\nOrder #${order.id}\nTotal: ₦${order.total.toLocaleString()}\n\nCustomer: ${order.customerName}\nDelivery Address: ${order.deliveryAddress}, ${order.deliveryCity} ${order.deliveryState}\n\nLog in to your rider dashboard to accept this order.`
+  };
+}
+
+// Send order notification to rider
+async function sendOrderNotificationToRider(riderName, riderEmail, order, riderPhone) {
+  try {
+    const emailTemplate = getRiderOrderNotificationTemplate(riderName, order);
+    const result = await sendEmailViaBrevo(
+      riderEmail,
+      emailTemplate.subject,
+      emailTemplate.html,
+      emailTemplate.text
+    );
+    console.log('✅ Order notification sent to rider:', riderEmail);
+    return result;
+  } catch (error) {
+    console.error('❌ Failed to send order notification to rider:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   sendEmailViaBrevo,
   sendUserRegistrationEmail,
@@ -579,5 +665,6 @@ module.exports = {
   sendRiderRegistrationEmail,
   sendCustomerMessageEmail,
   sendAdminOrderNotification,
-  sendAdminMessageNotification
+  sendAdminMessageNotification,
+  sendOrderNotificationToRider
 };
