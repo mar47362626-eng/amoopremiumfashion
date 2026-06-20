@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
-const { sendUserRegistrationEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail, sendAdminRegistrationEmail, sendCustomerMessageEmail, sendAdminOrderNotification, sendAdminMessageNotification } = require('./emailService');
+const { sendEmailViaBrevo, sendUserRegistrationEmail, sendOrderConfirmationEmail, sendOrderStatusUpdateEmail, sendAdminRegistrationEmail, sendRiderRegistrationEmail, sendCustomerMessageEmail, sendAdminOrderNotification, sendAdminMessageNotification } = require('./emailService');
 const { sendRegistrationSMS, sendOrderConfirmationSMS, sendOrderStatusSMS } = require('./smsService');
 const { sendRegistrationWhatsApp, sendOrderConfirmationWhatsApp, sendOrderStatusWhatsApp, sendBulkWhatsApp } = require('./whatsappService');
 
@@ -1514,6 +1514,14 @@ app.post('/api/rider/register', async (req, res) => {
       writeJSON(riderFilePath, riders);
     }
 
+    // Send welcome email to rider
+    try {
+      await sendRiderRegistrationEmail(name, email, vehicleType, licensePlate);
+    } catch (emailError) {
+      console.warn('⚠️ Failed to send rider registration email:', emailError.message);
+      // Don't fail registration if email fails
+    }
+
     const token = riderId + '_' + Date.now();
     res.status(201).json({
       success: true,
@@ -1565,27 +1573,183 @@ app.get('/api/rider/:riderId', (req, res) => {
   }
 });
 
-// PUT Update Rider Status
-app.put('/api/rider/status', (req, res) => {
-  const { riderId, isOnline } = req.body;
+// PUT Update Rider Status (change online/offline)
+app.put('/api/rider/:riderId/status', async (req, res) => {
+  const { isOnline } = req.body;
+  const riderId = req.params.riderId;
   
+  try {
+    // Update in Supabase
+    const { data, error } = await supabase
+      .from('riders')
+      .update({ is_online: isOnline })
+      .eq('id', riderId);
+    
+    if (error) {
+      console.warn('⚠️ Supabase update failed, using JSON:', error.message);
+      // Fallback to JSON
+      const riders = readJSON(riderFilePath);
+      const riderIndex = riders.findIndex(r => r.id === riderId);
+      if (riderIndex === -1) return res.status(404).json({ error: 'Rider not found' });
+      riders[riderIndex].isOnline = isOnline;
+      writeJSON(riderFilePath, riders);
+      return res.json({ success: true, rider: riders[riderIndex] });
+    }
+    
+    console.log(`✅ Rider ${riderId} status updated to ${isOnline ? 'online' : 'offline'}`);
+    res.json({ success: true, message: 'Status updated' });
+  } catch (error) {
+    console.error('❌ Error updating rider status:', error);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
+// ===== ORDER-RIDERS ENDPOINTS (New Rider Dashboard) =====
+
+// GET Available Orders (unassigned orders from order_riders table)
+app.get('/api/order-riders/available', async (req, res) => {
+  try {
+    // Fetch orders with status='assigned' that don't have a rider yet
+    const { data, error } = await supabase
+      .from('order_riders')
+      .select('order_id, orders(*)')
+      .is('rider_id', null)
+      .limit(50);
+    
+    if (error) {
+      console.warn('⚠️ Supabase fetch failed:', error.message);
+      return res.json([]); // Return empty if Supabase fails
+    }
+
+    // Map to include order details
+    const availableOrders = data.map(ord => ({
+      id: ord.order_id,
+      ...ord.orders
+    }));
+
+    console.log(`✅ Fetched ${availableOrders.length} available orders`);
+    res.json(availableOrders);
+  } catch (error) {
+    console.error('❌ Error fetching available orders:', error);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// GET Rider's Active Orders (assigned to specific rider, not delivered)
+app.get('/api/order-riders/rider/:riderId', async (req, res) => {
+  const riderId = req.params.riderId;
+  const status = req.query.status || 'active'; // active or delivered
+
+  try {
+    let query = supabase
+      .from('order_riders')
+      .select('*, orders(*)')
+      .eq('rider_id', riderId);
+    
+    if (status === 'active') {
+      query = query.neq('status', 'delivered');
+    } else if (status === 'delivered') {
+      query = query.eq('status', 'delivered');
+    }
+
+    const { data, error } = await query.limit(50);
+    
+    if (error) {
+      console.warn('⚠️ Supabase fetch failed:', error.message);
+      return res.json([]); // Return empty if Supabase fails
+    }
+
+    // Map to include order details
+    const orders = data.map(ord => ({
+      id: ord.id,
+      order_id: ord.order_id,
+      rider_id: ord.rider_id,
+      status: ord.status,
+      delivered_at: ord.delivered_at,
+      delivery_code: ord.delivery_code,
+      notes: ord.notes,
+      ...ord.orders
+    }));
+
+    console.log(`✅ Fetched ${orders.length} ${status} orders for rider ${riderId}`);
+    res.json(orders);
+  } catch (error) {
+    console.error('❌ Error fetching rider orders:', error);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// POST Accept Order (rider accepts available order)
+app.post('/api/order-riders/:orderRiderId/accept', async (req, res) => {
+  const orderRiderId = req.params.orderRiderId;
+  const { riderId } = req.body;
+
   if (!riderId) {
     return res.status(400).json({ error: 'Rider ID is required' });
   }
 
-  const riders = readJSON(riderFilePath);
-  const riderIndex = riders.findIndex((r) => r.id === riderId);
+  try {
+    // Update order_riders entry with rider_id and status='assigned'
+    const { data, error } = await supabase
+      .from('order_riders')
+      .update({ 
+        rider_id: riderId, 
+        status: 'assigned',
+        assigned_at: new Date().toISOString()
+      })
+      .eq('id', orderRiderId);
+    
+    if (error) {
+      console.warn('⚠️ Supabase update failed:', error.message);
+      return res.status(500).json({ error: 'Failed to accept order' });
+    }
 
-  if (riderIndex === -1) {
-    return res.status(404).json({ error: 'Rider not found' });
+    console.log(`✅ Rider ${riderId} accepted order assignment ${orderRiderId}`);
+    res.json({ success: true, message: 'Order accepted' });
+  } catch (error) {
+    console.error('❌ Error accepting order:', error);
+    res.status(500).json({ error: 'Failed to accept order' });
+  }
+});
+
+// PUT Update Order Status (for rider delivery progress)
+app.put('/api/order-riders/:orderRiderId/status', async (req, res) => {
+  const orderRiderId = req.params.orderRiderId;
+  const { status, notes, deliveryCode } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ error: 'Status is required' });
   }
 
-  riders[riderIndex].isOnline = isOnline !== undefined ? isOnline : !riders[riderIndex].isOnline;
-  
-  if (writeJSON(riderFilePath, riders)) {
-    res.json({ success: true, rider: riders[riderIndex] });
-  } else {
-    res.status(500).json({ error: 'Failed to update rider status' });
+  try {
+    const updateData = {
+      status: status,
+      notes: notes || null
+    };
+
+    if (status === 'arrived' && deliveryCode) {
+      updateData.delivery_code = deliveryCode;
+    }
+
+    if (status === 'delivered') {
+      updateData.delivered_at = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from('order_riders')
+      .update(updateData)
+      .eq('id', orderRiderId);
+    
+    if (error) {
+      console.warn('⚠️ Supabase update failed:', error.message);
+      return res.status(500).json({ error: 'Failed to update status' });
+    }
+
+    console.log(`✅ Order ${orderRiderId} status updated to ${status}`);
+    res.json({ success: true, message: 'Status updated' });
+  } catch (error) {
+    console.error('❌ Error updating order status:', error);
+    res.status(500).json({ error: 'Failed to update status' });
   }
 });
 
@@ -1971,6 +2135,85 @@ app.post('/api/notify-riders-order', async (req, res) => {
   } catch (error) {
     console.error('Error notifying riders:', error);
     res.status(500).json({ error: 'Failed to notify riders' });
+  }
+});
+
+// POST Rider Withdrawal Request
+app.post('/api/rider/:riderId/withdraw', async (req, res) => {
+  const riderId = req.params.riderId;
+  const { amount, bankName, accountNumber, accountName } = req.body;
+
+  if (!amount || amount < 1000) {
+    return res.status(400).json({ error: 'Minimum withdrawal is ₦1,000' });
+  }
+
+  try {
+    // Save withdrawal request to Supabase
+    const { data, error } = await supabase
+      .from('withdrawals')
+      .insert([{
+        rider_id: riderId,
+        amount: amount,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName,
+        status: 'pending',
+        requested_at: new Date().toISOString(),
+        processed_at: null
+      }]);
+
+    if (error) {
+      console.warn('⚠️ Supabase insert failed:', error.message);
+      // Fallback to JSON
+      const withdrawalsFilePath = path.join(__dirname, 'withdrawals.json');
+      let withdrawals = [];
+      if (fs.existsSync(withdrawalsFilePath)) {
+        const data = fs.readFileSync(withdrawalsFilePath, 'utf8');
+        withdrawals = data ? JSON.parse(data) : [];
+      }
+      withdrawals.push({
+        id: Date.now().toString(),
+        rider_id: riderId,
+        amount: amount,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName,
+        status: 'pending',
+        requested_at: new Date().toISOString()
+      });
+      fs.writeFileSync(withdrawalsFilePath, JSON.stringify(withdrawals, null, 2));
+    }
+
+    console.log(`✅ Withdrawal request created for rider ${riderId}: ₦${amount}`);
+    
+    // Send email confirmation
+    try {
+      const rider = readJSON(riderFilePath).find(r => r.id === riderId);
+      if (rider) {
+        const emailHTML = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Withdrawal Request Confirmed</h2>
+            <p>Hi ${rider.name},</p>
+            <p>Your withdrawal request has been submitted.</p>
+            <ul>
+              <li><strong>Amount:</strong> ₦${amount.toLocaleString()}</li>
+              <li><strong>Bank:</strong> ${bankName}</li>
+              <li><strong>Account:</strong> ${accountNumber}</li>
+              <li><strong>Status:</strong> Pending</li>
+            </ul>
+            <p>Your payment will be processed within 7 business days.</p>
+          </div>
+        `;
+        await sendEmailViaBrevo(rider.email, 'Withdrawal Request Confirmed', emailHTML);
+      }
+    } catch (emailError) {
+      console.warn('⚠️ Failed to send withdrawal confirmation email:', emailError.message);
+    }
+
+    res.json({ success: true, message: 'Withdrawal request submitted' });
+  } catch (error) {
+    console.error('❌ Withdrawal error:', error);
+    res.status(500).json({ error: 'Failed to process withdrawal' });
   }
 });
 
