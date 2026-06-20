@@ -2045,10 +2045,15 @@ app.post('/api/notify-riders-order', async (req, res) => {
   }
 
   try {
+    console.log('📂 Reading orders from:', ordersFilePath);
     const orders = readJSON(ordersFilePath);
+    console.log('📊 Total orders in file:', orders.length);
+    console.log('🔍 Looking for order with ID:', orderId);
     const order = orders.find((o) => o.id == orderId);
+    console.log('✅ Order found:', order ? 'YES' : 'NO');
 
     if (!order) {
+      console.log('❌ Order not found - returning 404');
       return res.status(404).json({ error: 'Order not found' });
     }
 
@@ -2077,6 +2082,7 @@ app.post('/api/notify-riders-order', async (req, res) => {
       onlineRiders = riders.filter((r) => r.is_online === true || r.isOnline === true);
     }
 
+    console.log('🏍️ Online riders found:', onlineRiders.length);
     if (onlineRiders.length === 0) {
       console.log('⚠️ No online riders available for order:', orderId);
       return res.json({ success: true, message: 'No online riders to notify', count: 0 });
@@ -2154,9 +2160,11 @@ app.post('/api/notify-riders-order', async (req, res) => {
         email: r.email || r.rider_email 
       }))
     });
+    console.log('✅ Response sent successfully');
   } catch (error) {
-    console.error('Error notifying riders:', error);
-    res.status(500).json({ error: 'Failed to notify riders' });
+    console.error('❌ CATCH BLOCK - Error notifying riders:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ error: 'Failed to notify riders', message: error.message });
   }
 });
 
