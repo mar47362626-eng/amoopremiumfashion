@@ -76,7 +76,7 @@ function setupEventListeners() {
     document.getElementById('logoutBtn').addEventListener('click', logout);
 
     // Status toggle
-    document.getElementById('riderStatus').addEventListener('click', toggleOnlineStatus);
+    document.getElementById('riderStatusToggle').addEventListener('click', toggleOnlineStatus);
 
     // Earnings card click - open withdrawal modal
     const earningsCard = document.getElementById('earningsCard');
@@ -892,29 +892,46 @@ function updateDashboardStats() {
 async function toggleOnlineStatus() {
     if (!riderData) return;
 
-    riderData.isOnline = !riderData.isOnline;
-    const statusElement = document.getElementById('riderStatus');
+    const riderId = localStorage.getItem('riderId');
+    const isOnline = !riderData.is_online;
+    const statusToggle = document.getElementById('riderStatusToggle');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
     
     try {
         const token = localStorage.getItem('riderToken');
-        await fetch(`${API_BASE}/api/rider/status`, {
+        const response = await fetch(`${API_BASE}/api/rider/${riderId}/status`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ isOnline: riderData.isOnline })
+            body: JSON.stringify({ is_online: isOnline })
         });
+
+        if (response.ok) {
+            riderData.is_online = isOnline;
+            
+            if (isOnline) {
+                statusDot.classList.remove('offline');
+                statusDot.classList.add('online');
+                statusText.textContent = 'Online';
+                statusToggle.classList.remove('offline');
+                statusToggle.title = 'Click to go offline';
+                showNotification('✅ You are now online', 'success');
+            } else {
+                statusDot.classList.remove('online');
+                statusDot.classList.add('offline');
+                statusText.textContent = 'Offline';
+                statusToggle.classList.add('offline');
+                statusToggle.title = 'Click to go online';
+                showNotification('⏸️ You are now offline', 'info');
+            }
+            console.log('✅ Online status updated:', isOnline ? 'ONLINE' : 'OFFLINE');
+        }
     } catch (error) {
         console.error('Error updating status:', error);
-    }
-
-    if (riderData.isOnline) {
-        statusElement.innerHTML = '<span class="status-dot online"></span>Online';
-        showNotification('You are now online', 'success');
-    } else {
-        statusElement.innerHTML = '<span class="status-dot offline"></span>Offline';
-        showNotification('You are now offline', 'info');
+        showNotification('❌ Failed to update status', 'error');
     }
 }
 

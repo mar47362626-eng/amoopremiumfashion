@@ -1599,35 +1599,6 @@ app.get('/api/rider/:riderId', (req, res) => {
 });
 
 // PUT Update Rider Status (change online/offline)
-app.put('/api/rider/:riderId/status', async (req, res) => {
-  const { isOnline } = req.body;
-  const riderId = req.params.riderId;
-  
-  try {
-    // Update in Supabase
-    const { data, error } = await supabase
-      .from('riders')
-      .update({ is_online: isOnline })
-      .eq('id', riderId);
-    
-    if (error) {
-      console.warn('⚠️ Supabase update failed, using JSON:', error.message);
-      // Fallback to JSON
-      const riders = readJSON(riderFilePath);
-      const riderIndex = riders.findIndex(r => r.id === riderId);
-      if (riderIndex === -1) return res.status(404).json({ error: 'Rider not found' });
-      riders[riderIndex].isOnline = isOnline;
-      writeJSON(riderFilePath, riders);
-      return res.json({ success: true, rider: riders[riderIndex] });
-    }
-    
-    console.log(`✅ Rider ${riderId} status updated to ${isOnline ? 'online' : 'offline'}`);
-    res.json({ success: true, message: 'Status updated' });
-  } catch (error) {
-    console.error('❌ Error updating rider status:', error);
-    res.status(500).json({ error: 'Failed to update status' });
-  }
-});
 
 // ===== ORDER-RIDERS ENDPOINTS (New Rider Dashboard) =====
 
