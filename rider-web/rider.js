@@ -4,9 +4,12 @@ const API_BASE = 'https://amoo-store-user-i18d.onrender.com';
 // ===== RIDER DATA =====
 let riderData = null;
 let orders = [];
+let acceptedOrders = [];
+let completedOrders = [];
 let currentDeliveryStatus = {};
 let currentDeliveryCode = null;
 let currentOrder = null;
+let currentRiderOrderId = null;
 let monthlyEarnings = 0;
 let totalEarnings = 0;
 
@@ -500,21 +503,52 @@ function filterAvailableOrders(e) {
 // ===== ORDER MODAL =====
 function openOrderModal(order) {
     currentOrder = order;
+    currentRiderOrderId = order.riderOrderId || order.id;
+    
     document.getElementById('modalOrderId').textContent = `Order ${order.id}`;
     document.getElementById('modalCustomerName').textContent = order.customerName;
     document.getElementById('modalCustomerPhone').textContent = order.customerPhone;
     document.getElementById('modalCustomerEmail').textContent = order.customerEmail;
     document.getElementById('modalDeliveryAddress').textContent = order.address;
     document.getElementById('modalAmount').textContent = order.total.toLocaleString();
-    document.getElementById('modalPaymentMethod').textContent = order.paymentMethod;
+    document.getElementById('modalPaymentMethod').textContent = order.paymentMethod || 'N/A';
 
     const itemsList = document.getElementById('modalItemsList');
     itemsList.innerHTML = '';
-    order.items.forEach(item => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    items.forEach(item => {
         const li = document.createElement('li');
-        li.textContent = `${item.name} (x${item.qty}) - ₦${item.price.toLocaleString()}`;
+        if (item.productName) {
+            li.textContent = `${item.productName} (x${item.quantity}) - ₦${(item.price * item.quantity).toLocaleString()}`;
+        } else {
+            li.textContent = `${item.name} (x${item.qty || 1}) - ₦${(item.price || 0).toLocaleString()}`;
+        }
         itemsList.appendChild(li);
     });
+
+    // Update modal buttons based on order status
+    const actionButtons = document.getElementById('modalActionButtons');
+    if (actionButtons) {
+        actionButtons.innerHTML = '';
+        
+        if (order.status === 'shipped' || order.status === 'available') {
+            // Show Accept button for available orders
+            const acceptBtn = document.createElement('button');
+            acceptBtn.textContent = '✅ Accept Order';
+            acceptBtn.className = 'btn-primary';
+            acceptBtn.style.marginRight = '0.5rem';
+            acceptBtn.onclick = acceptOrder;
+            actionButtons.appendChild(acceptBtn);
+        } else if (order.status === 'accepted') {
+            // Show Send Code button for accepted orders
+            const codeBtn = document.createElement('button');
+            codeBtn.textContent = '🔐 Send Delivery Code';
+            codeBtn.className = 'btn-primary';
+            codeBtn.style.marginRight = '0.5rem';
+            codeBtn.onclick = sendDeliveryCode;
+            actionButtons.appendChild(codeBtn);
+        }
+    }
 
     document.getElementById('orderModal').classList.add('show');
 }
@@ -522,6 +556,7 @@ function openOrderModal(order) {
 function closeOrderModal() {
     document.getElementById('orderModal').classList.remove('show');
     currentOrder = null;
+    currentRiderOrderId = null;
 }
 
 // ===== ACCEPT/REJECT ORDER =====
@@ -531,10 +566,10 @@ async function acceptOrder() {
     try {
         const riderId = localStorage.getItem('riderId');
         const token = localStorage.getItem('riderToken');
-        const riderAssignmentId = currentOrder.riderAssignmentId;
+        const riderOrderId = currentRiderOrderId;
 
-        // Use new order-riders endpoint
-        const response = await fetch(`${API_BASE}/api/order-riders/${riderAssignmentId}/accept`, {
+        // Call accept endpoint
+        const response = await fetch(`${API_BASE}/api/rider-orders/${riderOrderId}/accept`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -544,18 +579,89 @@ async function acceptOrder() {
         });
 
         if (response.ok) {
-            currentOrder.status = 'assigned';
-            currentOrder.riderId = riderId;
-            currentDeliveryStatus[currentOrder.id] = 'picked';
-            
+            const result = await response.json();
             closeOrderModal();
             await loadAvailableOrders();
+            await loadActiveDeliveries();
             updateDashboardStats();
-            showNotification(`Order ${currentOrder.id} accepted! Heading to pickup.`, 'success');
+            showNotification(`Order ${currentOrder.id} accepted! Ready for code.`, 'success');
+        } else {
+            const error = await response.json();
+            showNotification(error.error || 'Failed to accept order', 'danger');
         }
     } catch (error) {
         console.error('Error accepting order:', error);
         showNotification('Error accepting order', 'danger');
+    }
+}
+
+// ===== SEND DELIVERY CODE =====
+async function sendDeliveryCode() {
+    if (!currentRiderOrderId) return;
+
+    try {
+        const token = localStorage.getItem('riderToken');
+        
+        const response = await fetch(`${API_BASE}/api/rider-orders/${currentRiderOrderId}/send-code`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showNotification('Delivery code sent to customer email!', 'success');
+            // Show code verification input
+            showCodeVerificationModal();
+        } else {
+            const error = await response.json();
+            showNotification(error.error || 'Failed to send code', 'danger');
+        }
+    } catch (error) {
+        console.error('Error sending code:', error);
+        showNotification('Error sending code', 'danger');
+    }
+}
+
+// ===== VERIFY DELIVERY CODE =====
+async function verifyDeliveryCode() {
+    if (!currentRiderOrderId) return;
+
+    try {
+        const code = document.getElementById('deliveryCodeInput').value.trim();
+        if (!code) {
+            showNotification('Please enter the code', 'warning');
+            return;
+        }
+
+        const token = localStorage.getItem('riderToken');
+        
+        const response = await fetch(`${API_BASE}/api/rider-orders/${currentRiderOrderId}/verify-code`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ code })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showNotification('Delivery verified! Order marked as complete.', 'success');
+            closeCodeVerificationModal();
+            closeOrderModal();
+            await loadActiveDeliveries();
+            await loadCompletedDeliveries();
+            updateDashboardStats();
+        } else {
+            const error = await response.json();
+            showNotification(error.error || 'Invalid code', 'danger');
+        }
+    } catch (error) {
+        console.error('Error verifying code:', error);
+        showNotification('Error verifying code', 'danger');
     }
 }
 
@@ -571,8 +677,8 @@ async function loadActiveDeliveries() {
         const riderId = localStorage.getItem('riderId');
         const token = localStorage.getItem('riderToken');
 
-        // Fetch active orders assigned to this rider from order_riders table
-        const response = await fetch(`${API_BASE}/api/order-riders/rider/${riderId}?status=active`, {
+        // Fetch active orders accepted by this rider
+        const response = await fetch(`${API_BASE}/api/rider/${riderId}/active-orders`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -658,9 +764,175 @@ function createActiveDeliveryCard(order) {
     return card;
 }
 
+// ===== COMPLETED DELIVERIES =====
+async function loadCompletedDeliveries() {
+    try {
+        const riderId = localStorage.getItem('riderId');
+        const token = localStorage.getItem('riderToken');
+
+        // Fetch completed orders for this rider
+        const response = await fetch(`${API_BASE}/api/rider/${riderId}/completed-orders`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            const completedRiderOrders = await response.json();
+            completedOrders = completedRiderOrders.map(ord => ({
+                id: ord.order_id,
+                orderId: ord.order_id,
+                riderOrderId: ord.id,
+                customerName: ord.customer_name || 'Unknown',
+                customerPhone: ord.customer_phone || 'N/A',
+                customerEmail: ord.customer_email || 'N/A',
+                items: (ord.order_items && Array.isArray(ord.order_items)) ? ord.order_items : [],
+                total: ord.order_total || 0,
+                address: ord.delivery_address || 'N/A',
+                city: ord.delivery_city || '',
+                state: ord.delivery_state || '',
+                status: 'delivered',
+                deliveredAt: ord.delivered_at
+            }));
+            displayCompletedDeliveries();
+        }
+    } catch (error) {
+        console.error('Error loading completed deliveries:', error);
+    }
+}
+
+function displayCompletedDeliveries() {
+    const container = document.getElementById('completedOrdersList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+
+    if (completedOrders.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 2rem; color: #666;">No completed deliveries</p>';
+        return;
+    }
+
+    completedOrders.forEach(order => {
+        const card = createCompletedOrderCard(order);
+        container.appendChild(card);
+    });
+}
+
+function createCompletedOrderCard(order) {
+    const card = document.createElement('div');
+    card.className = 'order-card';
+    card.style.borderLeftColor = '#27ae60';
+    
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemCount = items.length || 0;
+    const deliveredTime = order.deliveredAt ? new Date(order.deliveredAt).toLocaleString() : 'N/A';
+
+    card.innerHTML = `
+        <div class="order-header">
+            <span class="order-id">${order.id}</span>
+            <span class="order-status" style="background-color: #27ae60; color: white;">✅ Delivered</span>
+        </div>
+        <div class="order-customer">
+            <p class="customer-name">${order.customerName}</p>
+            <p class="customer-phone">${order.customerPhone}</p>
+        </div>
+        <div class="order-details-list">
+            <p><strong>Items:</strong> ${itemCount}</p>
+            <p><strong>Delivered:</strong> ${deliveredTime}</p>
+        </div>
+        <div class="order-footer">
+            <span class="order-amount">₦${(order.total || 0).toLocaleString()}</span>
+        </div>
+    `;
+
+    return card;
+}
+
+// ===== CODE VERIFICATION MODAL =====
+function showCodeVerificationModal() {
+    const modal = document.createElement('div');
+    modal.id = 'codeVerificationModal';
+    modal.className = 'modal show';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        ">
+            <h2 style="margin-top: 0; color: #333;">🔐 Verify Delivery Code</h2>
+            <p style="color: #666;">Ask the customer for the verification code sent to their email:</p>
+            <input 
+                type="text" 
+                id="deliveryCodeInput" 
+                placeholder="Enter 6-digit code" 
+                style="
+                    width: 100%;
+                    padding: 0.75rem;
+                    border: 2px solid #ddd;
+                    border-radius: 4px;
+                    font-size: 1.2rem;
+                    letter-spacing: 2px;
+                    text-align: center;
+                    font-weight: bold;
+                    box-sizing: border-box;
+                    margin: 1rem 0;
+                "
+                maxlength="6"
+            />
+            <div style="display: flex; gap: 0.5rem;">
+                <button onclick="verifyDeliveryCode()" style="
+                    flex: 1;
+                    padding: 0.75rem;
+                    background-color: #27ae60;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-weight: bold;
+                ">Verify Code</button>
+                <button onclick="closeCodeVerificationModal()" style="
+                    flex: 1;
+                    padding: 0.75rem;
+                    background-color: #95a5a6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-weight: bold;
+                ">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.getElementById('deliveryCodeInput').focus();
+}
+
+function closeCodeVerificationModal() {
+    const modal = document.getElementById('codeVerificationModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
 // ===== DELIVERY STATUS & CODE =====
 function openDeliveryModal(order) {
     currentOrder = order;
+    currentRiderOrderId = order.riderOrderId || order.riderAssignmentId;
     document.getElementById('deliveryModal').classList.add('show');
     document.getElementById('codeSection').style.display = 'none';
     document.getElementById('generatedCode').textContent = '-';

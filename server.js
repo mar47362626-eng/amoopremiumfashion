@@ -1048,7 +1048,7 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
               delivery_state: orders[orderIndex].state || '',
               order_total: orders[orderIndex].total || 0,
               order_items: orders[orderIndex].items || [],
-              status: 'assigned',
+              status: 'shipped',
               assigned_at: new Date().toISOString(),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
@@ -2081,19 +2081,49 @@ app.put('/api/order/:orderId/delivered', async (req, res) => {
 });
 
 // GET Rider's Active Orders
-app.get('/api/rider/:riderId/active-orders', (req, res) => {
-  const orders = readJSON(ordersFilePath);
-  const activeOrders = orders.filter((o) => o.riderId === req.params.riderId && (o.status === 'assigned' || o.status === 'picked' || o.status === 'on-way' || o.status === 'arrived'));
-
-  res.json(activeOrders);
+app.get('/api/rider/:riderId/active-orders', async (req, res) => {
+  try {
+    // Fetch active orders for this rider from rider_orders table
+    const { data: activeOrders, error } = await supabase
+      .from('rider_orders')
+      .select('*')
+      .eq('accepted_by_rider_id', req.params.riderId)
+      .in('status', ['accepted', 'on-way'])
+      .order('accepted_at', { ascending: false });
+    
+    if (error) {
+      console.warn('⚠️ Failed to fetch active orders:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch active orders' });
+    }
+    
+    res.json(activeOrders || []);
+  } catch (error) {
+    console.error('Error fetching active orders:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET Rider's Completed Orders
-app.get('/api/rider/:riderId/completed-orders', (req, res) => {
-  const orders = readJSON(ordersFilePath);
-  const completedOrders = orders.filter((o) => o.riderId === req.params.riderId && o.status === 'delivered');
-
-  res.json(completedOrders);
+app.get('/api/rider/:riderId/completed-orders', async (req, res) => {
+  try {
+    // Fetch completed orders for this rider from rider_orders table
+    const { data: completedOrders, error } = await supabase
+      .from('rider_orders')
+      .select('*')
+      .eq('accepted_by_rider_id', req.params.riderId)
+      .eq('status', 'delivered')
+      .order('delivered_at', { ascending: false });
+    
+    if (error) {
+      console.warn('⚠️ Failed to fetch completed orders:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch completed orders' });
+    }
+    
+    res.json(completedOrders || []);
+  } catch (error) {
+    console.error('Error fetching completed orders:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET Available orders for riders from rider_orders table
@@ -2101,11 +2131,11 @@ app.get('/api/rider-orders/available', async (req, res) => {
   try {
     console.log('📋 Fetching available orders from rider_orders table...');
     
-    // Fetch from Supabase rider_orders table where status is 'assigned'
+    // Fetch from Supabase rider_orders table where status is 'shipped'
     const { data: availableOrders, error } = await supabase
       .from('rider_orders')
       .select('*')
-      .eq('status', 'assigned')
+      .eq('status', 'shipped')
       .order('assigned_at', { ascending: false });
     
     if (error) {
@@ -2118,6 +2148,234 @@ app.get('/api/rider-orders/available', async (req, res) => {
   } catch (error) {
     console.error('❌ Error fetching available orders:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST Accept order (rider accepts the delivery)
+app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
+  try {
+    const { riderOrderId } = req.params;
+    const { riderId } = req.body;
+    
+    if (!riderId) {
+      return res.status(400).json({ error: 'Rider ID is required' });
+    }
+    
+    // Update rider_orders to mark as accepted by this rider
+    const { data: updatedOrder, error: updateError } = await supabase
+      .from('rider_orders')
+      .update({ 
+        status: 'accepted',
+        accepted_by_rider_id: riderId,
+        accepted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', riderOrderId)
+      .select()
+      .single();
+    
+    if (updateError) {
+      console.error('Failed to accept order:', updateError.message);
+      return res.status(500).json({ error: 'Failed to accept order' });
+    }
+    
+    console.log(`✅ Rider ${riderId} accepted order ${updatedOrder.order_id}`);
+    res.json({ success: true, message: 'Order accepted', order: updatedOrder });
+  } catch (error) {
+    console.error('❌ Error accepting order:', error);
+    res.status(500).json({ error: 'Failed to accept order' });
+  }
+});
+
+// POST Send delivery code to customer
+app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
+  try {
+    const { riderOrderId } = req.params;
+    
+    // Fetch rider order details
+    const { data: riderOrder, error: fetchError } = await supabase
+      .from('rider_orders')
+      .select('*')
+      .eq('id', riderOrderId)
+      .single();
+    
+    if (fetchError || !riderOrder) {
+      return res.status(404).json({ error: 'Rider order not found' });
+    }
+    
+    // Generate a 6-digit code
+    const deliveryCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store code in rider_orders table temporarily
+    const { error: updateError } = await supabase
+      .from('rider_orders')
+      .update({ 
+        delivery_code: deliveryCode,
+        code_sent_at: new Date().toISOString()
+      })
+      .eq('id', riderOrderId);
+    
+    if (updateError) {
+      console.error('Failed to store delivery code:', updateError.message);
+      return res.status(500).json({ error: 'Failed to generate code' });
+    }
+    
+    // Send code to customer email
+    const emailTemplate = {
+      subject: `🔐 Your Delivery Verification Code - Order #${riderOrder.order_id}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h2 style="color: #27ae60; margin-bottom: 20px;">🚚 Your Order is Being Delivered!</h2>
+            
+            <p style="color: #666; font-size: 16px; line-height: 1.6;">
+              Hello ${riderOrder.customer_name},
+            </p>
+            
+            <p style="color: #666; font-size: 16px; line-height: 1.6;">
+              Your order is on its way! When the rider arrives with your delivery, please provide them with the verification code below:
+            </p>
+            
+            <div style="background-color: #f0f0f0; padding: 25px; border-radius: 5px; margin: 20px 0; text-align: center;">
+              <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;"><strong>DELIVERY VERIFICATION CODE</strong></p>
+              <p style="margin: 0; color: #27ae60; font-size: 36px; font-weight: bold; letter-spacing: 5px;">${deliveryCode}</p>
+            </div>
+            
+            <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;">
+              <p style="margin: 0; color: #856404;"><strong>⚠️ Important:</strong> This code is unique and will expire after successful delivery. Do not share this code with anyone.</p>
+            </div>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 20px;">
+              <p style="margin: 5px 0; color: #666;"><strong>Order ID:</strong> ${riderOrder.order_id}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Delivery Address:</strong> ${riderOrder.delivery_address}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Order Total:</strong> ₦${riderOrder.order_total.toLocaleString()}</p>
+            </div>
+            
+            <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+              This is an automated message from Amoo Store. Please do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `Your Delivery Verification Code: ${deliveryCode}\n\nOrder #${riderOrder.order_id}\nDeliver to: ${riderOrder.delivery_address}\n\nPlease provide this code to the rider upon delivery.`
+    };
+    
+    await sendEmailViaBrevo(
+      riderOrder.customer_email,
+      emailTemplate.subject,
+      emailTemplate.html,
+      emailTemplate.text
+    );
+    
+    console.log(`✅ Delivery code sent to ${riderOrder.customer_email}: ${deliveryCode}`);
+    res.json({ success: true, message: 'Code sent to customer email', code: deliveryCode });
+  } catch (error) {
+    console.error('❌ Error sending delivery code:', error);
+    res.status(500).json({ error: 'Failed to send delivery code' });
+  }
+});
+
+// POST Verify delivery code and mark order as delivered
+app.post('/api/rider-orders/:riderOrderId/verify-code', async (req, res) => {
+  try {
+    const { riderOrderId } = req.params;
+    const { code } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    // Fetch rider order
+    const { data: riderOrder, error: fetchError } = await supabase
+      .from('rider_orders')
+      .select('*')
+      .eq('id', riderOrderId)
+      .single();
+    
+    if (fetchError || !riderOrder) {
+      return res.status(404).json({ error: 'Rider order not found' });
+    }
+    
+    // Verify code
+    if (riderOrder.delivery_code !== code) {
+      console.warn(`⚠️ Invalid code attempt for order ${riderOrderId}`);
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+    
+    // Update rider_orders status to delivered
+    const { error: updateRiderOrderError } = await supabase
+      .from('rider_orders')
+      .update({ 
+        status: 'delivered',
+        delivered_at: new Date().toISOString(),
+        delivery_code: null
+      })
+      .eq('id', riderOrderId);
+    
+    if (updateRiderOrderError) {
+      console.error('Failed to update rider order:', updateRiderOrderError.message);
+      return res.status(500).json({ error: 'Failed to complete delivery' });
+    }
+    
+    // Update main orders table status to delivered
+    const { error: updateOrderError } = await supabase
+      .from('orders')
+      .update({ status: 'delivered' })
+      .eq('id', riderOrder.order_id);
+    
+    if (updateOrderError) {
+      console.error('Failed to update order:', updateOrderError.message);
+      return res.status(500).json({ error: 'Failed to update order status' });
+    }
+    
+    console.log(`✅ Order ${riderOrder.order_id} marked as delivered`);
+    
+    // Send delivery confirmation email to customer
+    const emailTemplate = {
+      subject: `✅ Your Order Has Been Delivered - Order #${riderOrder.order_id}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h2 style="color: #27ae60; margin-bottom: 20px;">✅ Your Order Has Been Delivered!</h2>
+            
+            <p style="color: #666; font-size: 16px; line-height: 1.6;">
+              Hello ${riderOrder.customer_name},
+            </p>
+            
+            <p style="color: #666; font-size: 16px; line-height: 1.6;">
+              Your order has been successfully delivered! Thank you for shopping with us.
+            </p>
+            
+            <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 5px 0; color: #333;"><strong>Order ID:</strong> ${riderOrder.order_id}</p>
+              <p style="margin: 5px 0; color: #333;"><strong>Delivery Completed:</strong> ${new Date().toLocaleString()}</p>
+              <p style="margin: 5px 0; color: #333;"><strong>Order Total:</strong> ₦${riderOrder.order_total.toLocaleString()}</p>
+            </div>
+            
+            <p style="color: #666; font-size: 14px; line-height: 1.6;">
+              We hope you enjoy your purchase! If you have any issues or questions, please don't hesitate to contact us.
+            </p>
+            
+            <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+              Thank you for choosing Amoo Store!
+            </p>
+          </div>
+        </div>
+      `,
+      text: `Your Order #${riderOrder.order_id} Has Been Delivered!\n\nThank you for shopping with us. We hope you enjoy your purchase!`
+    };
+    
+    await sendEmailViaBrevo(
+      riderOrder.customer_email,
+      emailTemplate.subject,
+      emailTemplate.html,
+      emailTemplate.text
+    ).catch(err => console.warn('Failed to send delivery confirmation email:', err.message));
+    
+    res.json({ success: true, message: 'Order marked as delivered' });
+  } catch (error) {
+    console.error('❌ Error verifying code:', error);
+    res.status(500).json({ error: 'Failed to verify code' });
   }
 });
 
