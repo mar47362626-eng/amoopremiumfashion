@@ -128,8 +128,7 @@
                 <div id="completed" class="page">
                     <div class="page-header">
                         <h2>Completed Deliveries</h2>
-                        <select id="filterDate" class="filter-select">
-                            <option value="today">Today</option>
+                    <label for="filterDate" class="sr-only">Filter completed deliveries by date</label>
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>
                         </select>
@@ -283,11 +282,11 @@
                     </div>
                 </div>
 
-                <div id="codeSection" class="code-section" style="display: none;">
+                <div id="codeSection" class="code-section hidden">
                     <h4>Generate Delivery Code</h4>
                     <p>Rider code will be sent to customer email:</p>
                     <div id="generatedCode" class="generated-code">-</div>
-                    <p id="codeMessage" style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;"></p>
+                    <p id="codeMessage" class="code-message"></p>
                 </div>
 
                 <textarea id="statusNotes" placeholder="Add notes (optional)" rows="4"></textarea>
@@ -314,6 +313,7 @@
                     <input type="password" id="regConfirmPassword" placeholder="Confirm Password" required>
 
                     <h3>Vehicle Information</h3>
+                    <label for="regVehicleType">Vehicle Type</label>
                     <select id="regVehicleType" required>
                         <option value="">Select Vehicle Type</option>
                         <option value="motorcycle">Motorcycle</option>
@@ -328,13 +328,13 @@
                     <input type="text" id="regAccountNumber" placeholder="Account Number" required>
                     <input type="text" id="regAccountName" placeholder="Account Name" required>
 
-                    <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">Register</button>
-                    <button type="button" class="btn-secondary" id="regCancelBtn" style="width: 100%; margin-top: 0.5rem;">Cancel</button>
+                    <button type="submit" class="btn-primary btn-block mt-1">Register</button>
+                    <button type="button" class="btn-secondary btn-block mt-half" id="regCancelBtn">Cancel</button>
                 </form>
                 <p id="regError" class="error-message"></p>
                 <p id="regSuccess" class="success-message"></p>
-                <p style="text-align: center; margin-top: 1rem;">
-                    Already have an account? <a href="#" id="switchToLogin" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">Login</a>
+                <p class="text-center mt-1">
+                    Already have an account? <a href="#" id="switchToLogin" class="modal-link">Login</a>
                 </p>
             </div>
         </div>
@@ -348,12 +348,12 @@
                 <form id="loginForm">
                     <input type="email" id="loginEmail" placeholder="Email Address" required>
                     <input type="password" id="loginPassword" placeholder="Password" required>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Login</button>
-                    <button type="button" class="btn-secondary" id="loginCancelBtn" style="width: 100%; margin-top: 0.5rem;">Cancel</button>
+                    <button type="submit" class="btn-primary btn-block">Login</button>
+                    <button type="button" class="btn-secondary btn-block mt-half" id="loginCancelBtn">Cancel</button>
                 </form>
                 <p id="loginError" class="error-message"></p>
-                <p style="text-align: center; margin-top: 1rem;">
-                    New Rider? <a href="#" id="switchToRegister" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">Register here</a>
+                <p class="text-center mt-1">
+                    New Rider? <a href="#" id="switchToRegister" class="modal-link">Register here</a>
                 </p>
             </div>
         </div>
@@ -367,19 +367,16 @@
             <div class="withdrawal-header">
                 <h3>💰 Earnings & Withdrawal</h3>
                 <div class="earnings-display" id="totalEarningsDisplay">₦0</div>
-                <p style="margin: 0; font-size: 14px;">Total Earnings</p>
-            </div>
-
-            <div class="withdrawal-form">
+                    <p class="summary-label">Total Earnings</p>
                 <h4>📊 Earnings Summary</h4>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="two-column-summary">
                     <div>
-                        <p style="margin: 0; color: #999; font-size: 12px;">This Month</p>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 18px; font-weight: 700; color: var(--primary-color);" id="monthEarningsDisplay">₦0</p>
+                        <p class="summary-label">This Month</p>
+                        <p class="summary-value primary" id="monthEarningsDisplay">₦0</p>
                     </div>
                     <div>
-                        <p style="margin: 0; color: #999; font-size: 12px;">Completed Orders</p>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 18px; font-weight: 700; color: var(--secondary-color);" id="completedOrdersDisplay">0</p>
+                        <p class="summary-label">Completed Orders</p>
+                        <p class="summary-value secondary" id="completedOrdersDisplay">0</p>
                     </div>
                 </div>
             </div>
@@ -388,15 +385,13 @@
                 <h4>💸 Request Withdrawal</h4>
                 <div class="form-group">
                     <label>Amount to Withdraw</label>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <input type="number" id="withdrawalAmount" placeholder="Enter amount" min="1000" step="500">
-                        <button type="button" class="btn-secondary" id="withdrawMaxBtn" style="flex: 0.5; padding: 0.75rem;">Max</button>
-                    </div>
-                    <p style="font-size: 12px; color: #999; margin: 0.5rem 0 0 0;">Minimum: ₦1,000 | Maximum: Available Balance</p>
-                </div>
-
+                        <div class="input-row">
+                            <input type="number" id="withdrawalAmount" placeholder="Enter amount" min="1000" step="500">
+                            <button type="button" class="btn-secondary btn-half" id="withdrawMaxBtn">Max</button>
+                        </div>
+                        <p class="helper-text">Minimum: ₦1,000 | Maximum: Available Balance</p>
                 <div class="form-group">
-                    <label>Select Bank Account</label>
+                    <label for="withdrawalAccount">Select Bank Account</label>
                     <select id="withdrawalAccount" required>
                         <option value="">Loading account details...</option>
                     </select>

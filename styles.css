@@ -107,6 +107,7 @@ input {
   inset: 0;
   background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 84px 84px;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 88%);
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 88%);
 }
 
@@ -130,6 +131,7 @@ input {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(12, 17, 31, 0.84);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
 }
@@ -326,6 +328,7 @@ input {
   position: absolute;
   inset: 0;
   background: rgba(4, 7, 14, 0.7);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -340,7 +343,6 @@ input {
   box-shadow: var(--shadow);
   max-height: 80vh;
   overflow: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .account-modal-close {
@@ -431,9 +433,9 @@ input {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-  appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+  appearance: none;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23f4f1ea' d='M7 10l5 5 5-5z'/></svg>");
   background-repeat: no-repeat;
   background-position: right 14px center;
@@ -544,7 +546,13 @@ p {
 }
 
 .hero-copy h1 {
-  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+@supports (text-wrap: balance) {
+  .hero-copy h1 {
+    text-wrap: balance;
+  }
 }
 
 .hero-actions {
@@ -604,6 +612,7 @@ p {
 .store-panel {
   border: 1px solid var(--line);
   background: var(--panel);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
 }
@@ -719,6 +728,7 @@ p {
   padding: 14px 16px;
   border-radius: 20px;
   background: rgba(9, 12, 20, 0.64);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
 
@@ -837,6 +847,7 @@ p {
   border-radius: 24px;
   padding: 28px;
   box-shadow: 0 25px 60px rgba(2,6,18,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
 }
@@ -1020,6 +1031,7 @@ p {
   background: linear-gradient(135deg, rgba(17,25,45,0.95) 0%, rgba(12,17,31,0.95) 100%);
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 25px 60px rgba(2,6,18,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
   position: sticky;
@@ -1318,6 +1330,10 @@ p {
   border: 1px solid rgba(255,255,255,0.03);
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+.payment-preview--spaced {
+  margin-top: 12px;
 }
 
 .payment-instructions {
@@ -1713,7 +1729,17 @@ p {
 .highlight-card h3,
 .product-body h3,
 .store-summary strong {
-  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+@supports (text-wrap: balance) {
+  .collection-card h3,
+  .feature-card h3,
+  .highlight-card h3,
+  .product-body h3,
+  .store-summary strong {
+    text-wrap: balance;
+  }
 }
 
 .collection-card.hidden,
@@ -1799,6 +1825,7 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.88rem;
   color: #fff;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -1921,6 +1948,7 @@ p {
   letter-spacing: 0.16em;
   font-size: 0.72rem;
   font-weight: 700;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
