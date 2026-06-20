@@ -2036,9 +2036,11 @@ app.get('/api/rider/:riderId/completed-orders', (req, res) => {
 
 // POST Notify riders about available order
 app.post('/api/notify-riders-order', async (req, res) => {
+  console.log('🔔 ENDPOINT HIT: /api/notify-riders-order called with body:', req.body);
   const { orderId } = req.body;
 
   if (!orderId) {
+    console.log('❌ No orderId provided');
     return res.status(400).json({ error: 'Order ID is required' });
   }
 
