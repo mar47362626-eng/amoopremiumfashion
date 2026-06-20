@@ -1,5 +1,5 @@
 // ===== API BASE URL =====
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'https://amoostore.onrender.com';
 
 // ===== RIDER DATA =====
 let riderData = null;
