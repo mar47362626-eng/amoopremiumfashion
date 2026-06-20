@@ -2148,6 +2148,42 @@ app.post('/api/notify-riders-order', async (req, res) => {
       return res.json({ success: true, message: 'No online riders to notify', count: 0 });
     }
 
+    // Create order_riders entries in Supabase for each online rider with full order details
+    try {
+      console.log('📝 Creating order_riders entries in Supabase for all online riders...');
+      
+      const orderRiderEntries = onlineRiders.map((rider) => ({
+        order_id: orderId,
+        rider_id: rider.id,
+        customer_name: order.customerName || order.customer_name || 'Unknown',
+        customer_phone: order.phone || order.customer_phone || '',
+        delivery_address: order.address || order.delivery_address || '',
+        delivery_city: order.city || '',
+        delivery_state: order.state || '',
+        order_total: order.total || 0,
+        order_items: JSON.stringify(order.items || []),
+        customer_email: order.customerEmail || order.customer_email || '',
+        status: 'assigned',
+        assigned_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      
+      // Insert all entries into Supabase
+      const { data: insertedEntries, error: insertError } = await supabase
+        .from('order_riders')
+        .insert(orderRiderEntries)
+        .select();
+      
+      if (insertError) {
+        console.warn('⚠️ Failed to create order_riders entries in Supabase:', insertError.message);
+      } else {
+        console.log(`✅ Created ${insertedEntries?.length || orderRiderEntries.length} order_riders entries in Supabase with full order details`);
+      }
+    } catch (orderRiderError) {
+      console.warn('⚠️ Error creating order_riders entries:', orderRiderError.message);
+    }
+
     // Send email notification to each online rider
     const riderEmailPromises = onlineRiders.map(async (rider) => {
       try {
