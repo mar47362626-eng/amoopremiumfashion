@@ -1020,7 +1020,42 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       orders[orderIndex].status = status;
       writeJSON(ordersFilePath, orders);
       
-      // Send order status update email
+      // If status is "shipped", create entry in order_riders table for riders to pick up
+      if (status === 'shipped') {
+        try {
+          // First check if order_riders entry exists
+          const { data: existingEntry, error: checkError } = await supabase
+            .from('order_riders')
+            .select('id')
+            .eq('order_id', req.params.orderId)
+            .single();
+          
+          if (!existingEntry && !checkError) {
+            // Entry doesn't exist, create it
+            const { data: newEntry, error: insertError } = await supabase
+              .from('order_riders')
+              .insert([{
+                order_id: req.params.orderId,
+                rider_id: null, // Available for any rider
+                status: 'assigned',
+                assigned_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }])
+              .select();
+            
+            if (insertError) {
+              console.warn('⚠️ Failed to create order_riders entry:', insertError.message);
+            } else {
+              console.log('✅ Created order_riders entry for order:', req.params.orderId);
+            }
+          }
+        } catch (orderRiderError) {
+          console.warn('⚠️ Error managing order_riders:', orderRiderError.message);
+        }
+      }
+      
+      // Send order status update email to customer
       sendOrderStatusUpdateEmail(
         orders[orderIndex].customerName,
         orders[orderIndex].customerEmail,
@@ -1028,16 +1063,6 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
         status,
         orders[orderIndex].items
       ).catch(error => console.error('Email sending error (non-critical):', error.message));
-      
-      // Send order status SMS (DISABLED - Need Nigerian Twilio number)
-      // if (orders[orderIndex].phone) {
-      //   sendOrderStatusSMS(
-      //     orders[orderIndex].phone,
-      //     orders[orderIndex].customerName,
-      //     orders[orderIndex].id,
-      //     status
-      //   ).catch(error => console.error('SMS sending error (non-critical):', error.message));
-      // }
     }
 
     console.log('✅ Order status updated:', req.params.orderId, '→', status);
@@ -2086,6 +2111,12 @@ app.post('/api/notify-riders-order', async (req, res) => {
     // Send email notification to each online rider
     const riderEmailPromises = onlineRiders.map(async (rider) => {
       try {
+        const riderEmail = rider.email || rider.rider_email;
+        if (!riderEmail) {
+          console.warn(`⚠️ No email found for rider: ${rider.name || rider.id}`);
+          return;
+        }
+
         const riderNotificationHTML = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
             <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -2099,12 +2130,12 @@ app.post('/api/notify-riders-order', async (req, res) => {
               </div>
 
               <p style="color: #555; font-size: 16px; margin: 20px 0;">
-                Hi ${rider.name || 'Rider'},<br><br>
+                Hi ${rider.name || rider.rider_name || 'Rider'},<br><br>
                 A new order has just been shipped and is now available for you to pick up! Check your dashboard to accept this order.
               </p>
 
               <div style="margin: 20px 0;">
-                <a href="https://amoostore.onrender.com/rider" style="display: inline-block; background-color: #FF6B35; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                <a href="https://amoostorefasthion.netlify.app/rider" style="display: inline-block; background-color: #FF6B35; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                   View Available Orders
                 </a>
               </div>
@@ -2119,12 +2150,19 @@ app.post('/api/notify-riders-order', async (req, res) => {
           </div>
         `;
 
-        // Send email (using existing emailService function with custom parameters)
-        console.log(`📧 Sending order notification to rider: ${rider.email}`);
-        // Use nodemailer or your email service directly
-        // For now, we'll log it and you can integrate with your email service
+        const riderNotificationText = `New Order Available!\n\nOrder ID: ${orderId}\nCustomer: ${order.customerName || 'Unknown'}\nDelivery Address: ${order.address || 'Not specified'}\nAmount: ₦${(order.total || 0).toLocaleString()}\n\nA new order has been shipped and is available for pickup. Log in to your rider dashboard to accept this order.`;
+
+        // Send email using Brevo
+        console.log(`📧 Sending order notification to rider: ${riderEmail}`);
+        await sendEmailViaBrevo(
+          riderEmail,
+          `🏍️ New Order Available - #${orderId}`,
+          riderNotificationHTML,
+          riderNotificationText
+        );
+        console.log(`✅ Email sent to rider: ${riderEmail}`);
       } catch (error) {
-        console.warn(`⚠️ Could not send email to rider ${rider.email}:`, error.message);
+        console.warn(`⚠️ Could not send email to rider ${rider.email || rider.rider_email}:`, error.message);
       }
     });
 
