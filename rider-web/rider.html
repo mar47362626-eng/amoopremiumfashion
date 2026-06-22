@@ -379,10 +379,22 @@
                         </div>
                         <p class="helper-text">Minimum: ₦1,000 | Maximum: Available Balance</p>
                 <div class="form-group">
-                    <label for="withdrawalAccount">Select Bank Account</label>
-                    <select id="withdrawalAccount" required>
-                        <option value="">Loading account details...</option>
-                    </select>
+                    <label>💳 Bank Account Details</label>
+                    <div class="account-details-display">
+                        <div class="account-info-row">
+                            <span class="info-label">Bank:</span>
+                            <span class="info-value" id="displayBankName">Loading...</span>
+                        </div>
+                        <div class="account-info-row">
+                            <span class="info-label">Account Name:</span>
+                            <span class="info-value" id="displayAccountName">Loading...</span>
+                        </div>
+                        <div class="account-info-row">
+                            <span class="info-label">Account Number:</span>
+                            <span class="info-value" id="displayAccountNumber">Loading...</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="withdrawalAccount" value="">
                 </div>
 
                 <div class="withdrawal-info">

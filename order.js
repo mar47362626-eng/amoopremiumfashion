@@ -9,63 +9,101 @@ async function fetchCustomerOrders() {
   }
 
   try {
-    const response = await fetch(`https://amoo-store-user-i18d.onrender.com/api/orders/${accountProfile.email}`);
-    const orders = await response.json();
+    // Show loading state
+    ordersList.innerHTML = '<div class="orders-alert"><strong>Loading your orders...</strong></div>';
+    
+    console.log('📋 Fetching orders from Supabase for:', accountProfile.email);
+    
+    // Fetch from Supabase directly using customer email
+    const { data: orders, error } = await window.supabase
+      .from('orders')
+      .select('*')
+      .eq('customerEmail', accountProfile.email)
+      .order('createdAt', { ascending: false });
+    
+    if (error) {
+      console.error('❌ Error fetching orders from Supabase:', error);
+      throw new Error(`Supabase error: ${error.message}`);
+    }
 
     if (!orders || orders.length === 0) {
+      console.log('✅ No orders found for user:', accountProfile.email);
       ordersEmpty.removeAttribute('hidden');
       ordersList.innerHTML = '';
       return;
     }
 
+    console.log(`✅ Found ${orders.length} orders for user:`, accountProfile.email);
+    
+    // Transform Supabase order format to match the UI format
+    const formattedOrders = orders.map(order => ({
+      id: order.id,
+      status: order.status || 'pending',
+      createdAt: order.createdAt,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      phone: order.phone,
+      address: order.address,
+      items: order.items || [],
+      subtotal: order.subtotal || 0,
+      delivery: order.delivery || 0,
+      total: order.total || 0,
+      paymentMethod: order.paymentMethod || 'unknown'
+    }));
+
     ordersEmpty.setAttribute('hidden', '');
-    ordersList.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+    ordersList.innerHTML = formattedOrders.map(order => renderOrderCard(order)).join('');
     
     // Attach refresh status listeners to all orders
     document.querySelectorAll('[data-refresh-order-status]').forEach(btn => {
       btn.addEventListener('click', () => refreshOrderStatus(btn.dataset.refreshOrderStatus));
     });
   } catch (error) {
-    console.error('Error fetching orders:', error);
-    ordersList.innerHTML = '<div class="orders-alert"><strong>Error loading orders.</strong> Please try again later.</div>';
+    console.error('❌ Error fetching orders:', error);
+    ordersList.innerHTML = `<div class="orders-alert"><strong>Error loading orders:</strong> ${error.message}</div>`;
   }
 }
 
 // Fetch latest order status from Supabase
 async function refreshOrderStatus(orderId) {
   try {
-    const response = await fetch(`https://amoo-store-user-i18d.onrender.com/api/orders/${orderId}/status`);
-    if (!response.ok) {
-      console.error('Error fetching order status:', response.status);
+    console.log('🔄 Refreshing order status for:', orderId);
+    
+    // Fetch directly from Supabase
+    const { data: order, error } = await window.supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+    
+    if (error || !order) {
+      console.error('❌ Error fetching order status:', error?.message || 'Order not found');
       alert('Unable to fetch latest status. Please try again.');
       return;
     }
 
-    const data = await response.json();
-    if (data.success && data.order) {
-      const order = data.order;
-      console.log('✅ Latest order status from Supabase:', orderId, '→', order.status);
+    const updatedOrder = order;
+    console.log('✅ Latest order status from Supabase:', orderId, '→', updatedOrder.status);
+    
+    // Update the order card
+    const orderCard = document.querySelector(`[data-order-id="${orderId}"]`);
+    if (orderCard) {
+      const statusElement = orderCard.querySelector('.order-status');
+      const statusNoteElement = orderCard.querySelector('.order-status-note');
       
-      // Update the order card
-      const orderCard = document.querySelector(`[data-order-id="${orderId}"]`);
-      if (orderCard) {
-        const statusElement = orderCard.querySelector('.order-status');
-        const statusNoteElement = orderCard.querySelector('.order-status-note');
-        
-        if (statusElement) {
-          statusElement.textContent = order.status.toUpperCase();
-          statusElement.style.backgroundColor = getStatusColor(order.status);
-        }
-        
-        if (statusNoteElement) {
-          statusNoteElement.innerHTML = getStatusMessage(order.status);
-        }
-        
-        alert(`✅ Order status updated: ${order.status.toUpperCase()}`);
+      if (statusElement) {
+        statusElement.textContent = updatedOrder.status.toUpperCase();
+        statusElement.style.backgroundColor = getStatusColor(updatedOrder.status);
       }
+      
+      if (statusNoteElement) {
+        statusNoteElement.innerHTML = getStatusMessage(updatedOrder.status);
+      }
+      
+      alert(`✅ Order status updated: ${updatedOrder.status.toUpperCase()}`);
     }
   } catch (error) {
-    console.error('Error refreshing order status:', error);
+    console.error('❌ Error refreshing order status:', error);
     alert('Error refreshing order status. Please try again.');
   }
 }

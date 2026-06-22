@@ -335,14 +335,39 @@ function loadRiderProfile() {
     document.getElementById('profilePhone').textContent = `Phone: ${riderData.phone}`;
     document.getElementById('profileEmail').textContent = riderData.email;
     document.getElementById('profileRating').textContent = `${riderData.rating || 5} ⭐`;
-    document.getElementById('totalDeliveries').textContent = riderData.totalDeliveries || 0;
+    
+    // Fetch completed deliveries count from delivery_orders
+    fetchCompletedDeliveriesCount();
+    
     document.getElementById('monthDeliveries').textContent = riderData.monthDeliveries || 0;
     document.getElementById('vehicleType').textContent = riderData.vehicleType;
     document.getElementById('licensePlate').textContent = riderData.licensePlate;
-    document.getElementById('bankAccount').textContent = riderData.accountNumber;
+    document.getElementById('bankAccount').textContent = riderData.accountNumber ? `${riderData.bankName} - ${riderData.accountNumber}` : 'Not set';
     document.getElementById('joinDate').textContent = riderData.joinDate ? new Date(riderData.joinDate).toLocaleDateString() : 'Today';
     document.getElementById('totalEarnings').textContent = `₦${(riderData.totalEarnings || 0).toLocaleString()}`;
     document.getElementById('earningsValue').textContent = `₦${(riderData.monthEarnings || 0).toLocaleString()}`;
+}
+
+// Fetch completed deliveries count from delivery_orders
+async function fetchCompletedDeliveriesCount() {
+    try {
+        const riderId = localStorage.getItem('riderId');
+        const token = localStorage.getItem('riderToken');
+        
+        const response = await fetch(`${API_BASE}/api/rider/${riderId}/delivery-orders/completed`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const completedDeliveries = await response.json();
+            const count = Array.isArray(completedDeliveries) ? completedDeliveries.length : 0;
+            document.getElementById('totalDeliveries').textContent = count;
+            console.log(`✅ Completed deliveries: ${count}`);
+        }
+    } catch (error) {
+        console.error('Error fetching completed deliveries:', error);
+        document.getElementById('totalDeliveries').textContent = riderData.totalDeliveries || 0;
+    }
 }
 
 function editProfile() {
@@ -1375,13 +1400,11 @@ function openWithdrawalModal() {
     document.getElementById('monthEarningsDisplay').textContent = `₦${monthlyEarnings.toLocaleString()}`;
     document.getElementById('completedOrdersDisplay').textContent = completedCount;
 
-    // Set bank account from rider data
-    const accountSelect = document.getElementById('withdrawalAccount');
-    accountSelect.innerHTML = `
-        <option value="${riderData.id}" selected>
-            ${riderData.bankName} - ${riderData.accountNumber}
-        </option>
-    `;
+    // Set bank account details from rider data (no longer a select dropdown)
+    document.getElementById('displayBankName').textContent = riderData.bankName || 'Not set';
+    document.getElementById('displayAccountName').textContent = riderData.accountName || 'Not set';
+    document.getElementById('displayAccountNumber').textContent = riderData.accountNumber || 'Not set';
+    document.getElementById('withdrawalAccount').value = riderData.id;
 
     // Show modal
     document.getElementById('withdrawalModal').classList.add('show');

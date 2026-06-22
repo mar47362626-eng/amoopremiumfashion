@@ -905,7 +905,7 @@ async function loadRiders() {
   }
 }
 
-function displayRiders(riders) {
+async function displayRiders(riders) {
   if (!riders || riders.length === 0) {
     document.getElementById('riders-list').innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No riders registered yet</p>';
     return;
@@ -914,7 +914,22 @@ function displayRiders(riders) {
   const ridersList = document.getElementById('riders-list');
   ridersList.innerHTML = '';
 
-  riders.forEach(rider => {
+  for (const rider of riders) {
+    // Fetch completed orders count from delivery_orders table
+    let completedOrdersCount = 0;
+    try {
+      const { data: completedOrders } = await window.supabase
+        .from('delivery_orders')
+        .select('id')
+        .eq('rider_id', rider.id)
+        .eq('status', 'delivered');
+      
+      completedOrdersCount = completedOrders ? completedOrders.length : 0;
+    } catch (error) {
+      console.error(`Error fetching completed orders for rider ${rider.id}:`, error);
+      completedOrdersCount = rider.total_deliveries || 0;
+    }
+
     const riderCard = document.createElement('div');
     riderCard.style.cssText = `
       background: white;
@@ -944,7 +959,7 @@ function displayRiders(riders) {
         <div>
           <strong>Status:</strong> ${onlineStatus}<br>
           <strong>Rating:</strong> ⭐ ${rider.rating}/5.0<br>
-          <strong>Deliveries:</strong> ${rider.total_deliveries} total, ${rider.month_deliveries} this month
+          <strong>Completed Orders:</strong> ${completedOrdersCount} total
         </div>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; border-top: 1px solid #eee; padding-top: 12px;">
@@ -965,7 +980,7 @@ function displayRiders(riders) {
       </div>
     `;
     ridersList.appendChild(riderCard);
-  });
+  }
 }
 
 async function viewRiderDetails(riderId) {

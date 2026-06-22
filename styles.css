@@ -2125,6 +2125,22 @@ p {
   width: 260px;
   height: 260px;
   border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), rgba(224, 179, 108, 0.1));
+  filter: blur(40px);
+  z-index: -1;
+}
+
+/* Contact Section Styles */
+.contact-info {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.contact-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
   background: radial-gradient(circle, rgba(226, 180, 106, 0.2), transparent 70%);
 }
 
