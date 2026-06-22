@@ -625,6 +625,7 @@ async function acceptOrder() {
         console.error('Error accepting order:', error);
         showNotification('Error accepting order', 'danger');
     }
+}
 
 // ===== SEND DELIVERY CODE =====
 async function sendDeliveryCode() {
