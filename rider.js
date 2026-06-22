@@ -351,9 +351,9 @@ async function fetchCompletedDeliveriesCount() {
 
         // Wait for Supabase client to be available
         let attempts = 0;
-        while (!window.supabase || !window.supabase.from || typeof window.supabase.from !== 'function') {
-            if (attempts > 20) {
-                throw new Error('Supabase client not initialized');
+        while (!window.supabase || !window.supabaseClient || !window.supabase.from || typeof window.supabase.from !== 'function') {
+            if (attempts > 60) {
+                throw new Error('Supabase client not initialized after 6 seconds');
             }
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
@@ -369,6 +369,9 @@ async function fetchCompletedDeliveriesCount() {
         if (!error) {
             document.getElementById('totalDeliveries').textContent = count || 0;
             console.log(`✅ Completed deliveries: ${count || 0}`);
+        } else {
+            console.warn('Error fetching deliveries:', error);
+            document.getElementById('totalDeliveries').textContent = riderData?.totalDeliveries || 0;
         }
     } catch (error) {
         console.error('Error fetching completed deliveries count:', error);
@@ -742,9 +745,9 @@ async function loadCompletedDeliveries() {
 
         // Wait for Supabase client to be available
         let attempts = 0;
-        while (!window.supabase || !window.supabase.from || typeof window.supabase.from !== 'function') {
-            if (attempts > 20) {
-                throw new Error('Supabase client not initialized');
+        while (!window.supabase || !window.supabaseClient || !window.supabase.from || typeof window.supabase.from !== 'function') {
+            if (attempts > 60) {
+                throw new Error('Supabase client not initialized after 6 seconds');
             }
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
