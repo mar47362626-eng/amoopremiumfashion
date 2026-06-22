@@ -74,33 +74,75 @@ let PRODUCTS = [
 ];
 
 // Initialize Supabase Client
+let supabaseInitPromise = null;
+
+async function ensureSupabaseLibraryLoaded() {
+  // If library is already loaded, resolve immediately
+  if (window.supabase?.createClient) {
+    return window.supabase;
+  }
+
+  // Wait for library to load from CDN
+  let attempts = 0;
+  while (!window.supabase?.createClient) {
+    if (attempts > 50) {
+      console.warn('⏳ Supabase CDN slow to load, will retry...');
+      // Try loading dynamically
+      return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        script.onload = () => {
+          console.log('✅ Supabase library loaded dynamically');
+          resolve(window.supabase);
+        };
+        script.onerror = () => {
+          console.error('❌ Failed to load Supabase library');
+          resolve(null);
+        };
+        document.head.appendChild(script);
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+  
+  return window.supabase;
+}
+
 async function initializeSupabase() {
   try {
+    // Wait for library to be available
+    const supabaseLib = await ensureSupabaseLibraryLoaded();
+    if (!supabaseLib?.createClient) {
+      console.error('❌ Supabase library not available after all attempts');
+      return;
+    }
+
     // Fetch config from backend
     const response = await fetch('https://amoo-store-user-i18d.onrender.com/api/config');
-    if (response.ok) {
-      const { supabaseUrl, supabaseAnonKey } = await response.json();
-      
-      // Check if Supabase module has createClient method
-      if (!window.supabase?.createClient) {
-        console.warn('⏳ Waiting for Supabase library to load...');
-        setTimeout(initializeSupabase, 500);
-        return;
-      }
-      
-      // Create Supabase client instance and store it
-      const { createClient } = window.supabase;
-      window.supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-      
-      // Create a wrapper for backward compatibility
-      window.supabase = {
-        ...window.supabase,
-        from: window.supabaseClient.from.bind(window.supabaseClient),
-        select: window.supabaseClient.select?.bind(window.supabaseClient)
-      };
-      
-      console.log('✅ Supabase client initialized');
+    if (!response.ok) {
+      console.error('❌ Failed to fetch Supabase config');
+      return;
     }
+    
+    const { supabaseUrl, supabaseAnonKey } = await response.json();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ Missing Supabase credentials in config');
+      return;
+    }
+    
+    // Create Supabase client instance and store it
+    const { createClient } = window.supabase;
+    window.supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    
+    // Create a wrapper for backward compatibility
+    window.supabase = {
+      ...window.supabase,
+      from: window.supabaseClient.from.bind(window.supabaseClient),
+      select: window.supabaseClient.select?.bind(window.supabaseClient)
+    };
+    
+    console.log('✅ Supabase client initialized successfully');
   } catch (error) {
     console.error('❌ Failed to initialize Supabase:', error);
   }
@@ -108,9 +150,11 @@ async function initializeSupabase() {
 
 // Initialize Supabase when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeSupabase);
+  document.addEventListener('DOMContentLoaded', () => {
+    supabaseInitPromise = initializeSupabase();
+  });
 } else {
-  initializeSupabase();
+  supabaseInitPromise = initializeSupabase();
 }
 
 
