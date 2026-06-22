@@ -154,7 +154,7 @@
         <!-- Orders Page -->
         <section class="page-section" data-page="orders">
           <div class="page-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div class="header-flex">
               <h2>Orders</h2>
               <button class="btn btn-small" onclick="loadOrders()" title="Refresh orders from Supabase">🔄 Refresh</button>
             </div>
@@ -189,51 +189,51 @@
           <div class="page-header">
             <h2>💬 Customer Messages</h2>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px; margin-top: 20px;">
+          <div class="messages-grid">
             <!-- Customers List -->
-            <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-              <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📧 Registered Customers</h3>
-              <div id="messages-customers-list" style="max-height: 400px; overflow-y: auto;">
-                <p style="color: #999; text-align: center;">Loading customers...</p>
+            <div class="white-card">
+              <h3 class="card-heading">📧 Registered Customers</h3>
+              <div id="messages-customers-list" class="customers-list">
+                <p class="placeholder-text">Loading customers...</p>
               </div>
             </div>
 
             <!-- Message Form -->
-            <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-              <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">✉️ Send Message to All Customers</h3>
+            <div class="white-card">
+              <h3 class="card-heading">✉️ Send Message to All Customers</h3>
               
-              <div id="message-success" style="background: #d4edda; color: #155724; padding: 12px; border-radius: 5px; margin-bottom: 15px; display: none;"></div>
-              <div id="message-error" style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 5px; margin-bottom: 15px; display: none;"></div>
+              <div id="message-success" class="message-success"></div>
+              <div id="message-error" class="message-error"></div>
 
               <form id="send-message-form">
-                <div style="margin-bottom: 15px;">
-                  <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #333;">Subject</label>
+                <div class="form-group-spaced">
+                  <label class="form-label">Subject</label>
                   <input 
                     type="text" 
                     id="msg-subject" 
                     placeholder="Message subject" 
                     required
-                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em;"
+                    class="form-input"
                   />
                 </div>
 
-                <div style="margin-bottom: 15px;">
-                  <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #333;">Message</label>
+                <div class="form-group-spaced">
+                  <label class="form-label">Message</label>
                   <textarea 
                     id="msg-content" 
                     placeholder="Type your message here..."
                     rows="8"
                     required
-                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 1em; font-family: inherit;"
+                    class="form-textarea"
                   ></textarea>
                 </div>
 
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <button type="submit" class="btn btn-primary btn-full-width">
                   📤 Send Message to All Customers
                 </button>
               </form>
 
-              <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+              <p class="helper-text">
                 This message will be sent to all registered customer emails.
               </p>
             </div>
@@ -243,7 +243,7 @@
         <!-- Riders Management Page -->
         <section class="page-section" data-page="riders">
           <div class="page-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div class="header-flex">
               <h2>🏍️ Riders Management</h2>
               <button class="btn btn-small" onclick="loadRiders()" title="Refresh riders from Supabase">🔄 Refresh</button>
             </div>
@@ -268,7 +268,7 @@
             <div class="settings-group">
               <label>
                 <span>Admin Email</span>
-                <span id="admin-email" style="display: block; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">Loading...</span>
+                <span id="admin-email" class="admin-email-display">Loading...</span>
               </label>
             </div>
             <button class="btn btn-secondary">Save Settings</button>
@@ -282,9 +282,9 @@
   <!-- Login Modal -->
   <div class="auth-modal" id="auth-modal" hidden>
     <div class="auth-panel">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="font-size: 32px; color: #7ed3c3; margin: 0;">AMOO STORE</h1>
-        <p style="color: #999; margin: 5px 0 0 0;">Admin Portal</p>
+      <div class="modal-header-center">
+        <h1 class="modal-title">AMOO STORE</h1>
+        <p class="modal-subtitle">Admin Portal</p>
       </div>
       <h2>Admin Login</h2>
       <form id="admin-login-form">
@@ -296,8 +296,8 @@
           <span>Password</span>
           <input type="password" name="password" placeholder="Enter password" required />
         </label>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
-        <button type="button" id="switch-to-register" class="btn btn-secondary" style="width: 100%; margin-top: 10px;">Create Admin Account</button>
+        <button type="submit" class="btn btn-primary btn-full-width">Login</button>
+        <button type="button" id="switch-to-register" class="btn btn-secondary btn-full-width btn-with-margin-top">Create Admin Account</button>
       </form>
     </div>
   </div>
@@ -305,9 +305,9 @@
   <!-- Register Modal -->
   <div class="auth-modal" id="register-modal" hidden>
     <div class="auth-panel">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="font-size: 32px; color: #7ed3c3; margin: 0;">AMOO STORE</h1>
-        <p style="color: #999; margin: 5px 0 0 0;">Admin Portal</p>
+      <div class="modal-header-center">
+        <h1 class="modal-title">AMOO STORE</h1>
+        <p class="modal-subtitle">Admin Portal</p>
       </div>
       <h2>Create Admin Account</h2>
       <form id="admin-register-form">
@@ -323,10 +323,10 @@
           <span>Password</span>
           <input type="password" name="password" placeholder="Create a password" required />
         </label>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">Register</button>
-        <button type="button" id="switch-to-login" class="btn btn-secondary" style="width: 100%; margin-top: 10px;">Back to Login</button>
+        <button type="submit" class="btn btn-primary btn-full-width">Register</button>
+        <button type="button" id="switch-to-login" class="btn btn-secondary btn-full-width btn-with-margin-top">Back to Login</button>
       </form>
-      <p id="register-message" style="margin-top: 10px; text-align: center; color: #7ed3c3;"></p>
+      <p id="register-message" class="register-message"></p>
     </div>
   </div>
 
