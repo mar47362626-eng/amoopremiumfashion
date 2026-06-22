@@ -1030,52 +1030,48 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       orders[orderIndex].status = status;
       writeJSON(ordersFilePath, orders);
       
-      // If status is "shipped", create entries in rider_orders table for ALL registered riders
+      // If status is "shipped", create ONE entry in rider_orders table (unassigned)
       if (status === 'shipped') {
         try {
-          console.log('🏍️ Creating rider_orders entries for all registered riders...');
+          console.log('🏍️ Creating single rider_orders entry for available orders...');
           
-          // Get ALL riders from Supabase (not just online)
+          // Get ALL riders from Supabase to send notifications
           const { data: allRiders, error: ridersError } = await supabase
             .from('riders')
             .select('*');
           
-          if (ridersError) {
-            console.warn('⚠️ Failed to fetch riders:', ridersError.message);
-          } else if (allRiders && allRiders.length > 0) {
-            console.log(`📢 Found ${allRiders.length} registered riders`);
+          // Create only ONE unassigned rider_orders entry
+          const riderOrderEntry = {
+            order_id: req.params.orderId,
+            rider_id: null, // Unassigned - any rider can pick it up
+            customer_name: orders[orderIndex].customerName || orders[orderIndex].customer_name || 'Unknown',
+            customer_phone: orders[orderIndex].phone || orders[orderIndex].customer_phone || '',
+            customer_email: orders[orderIndex].customerEmail || orders[orderIndex].customer_email || '',
+            delivery_address: orders[orderIndex].address || orders[orderIndex].delivery_address || '',
+            delivery_city: orders[orderIndex].city || '',
+            delivery_state: orders[orderIndex].state || '',
+            order_total: orders[orderIndex].total || 0,
+            order_items: orders[orderIndex].items || [],
+            status: 'shipped',
+            assigned_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          
+          // Insert single entry
+          const { data: insertedEntry, error: insertError } = await supabase
+            .from('rider_orders')
+            .insert([riderOrderEntry])
+            .select();
+          
+          if (insertError) {
+            console.warn('⚠️ Failed to create rider_orders entry:', insertError.message);
+          } else {
+            console.log(`✅ Created 1 unassigned rider_orders entry for order ${req.params.orderId}`);
             
-            // Create an entry for each rider with full order details
-            const riderOrderEntries = allRiders.map((rider) => ({
-              order_id: req.params.orderId,
-              rider_id: rider.id,
-              customer_name: orders[orderIndex].customerName || orders[orderIndex].customer_name || 'Unknown',
-              customer_phone: orders[orderIndex].phone || orders[orderIndex].customer_phone || '',
-              customer_email: orders[orderIndex].customerEmail || orders[orderIndex].customer_email || '',
-              delivery_address: orders[orderIndex].address || orders[orderIndex].delivery_address || '',
-              delivery_city: orders[orderIndex].city || '',
-              delivery_state: orders[orderIndex].state || '',
-              order_total: orders[orderIndex].total || 0,
-              order_items: orders[orderIndex].items || [],
-              status: 'shipped',
-              assigned_at: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }));
-            
-            // Insert all entries
-            const { data: insertedEntries, error: insertError } = await supabase
-              .from('rider_orders')
-              .insert(riderOrderEntries)
-              .select();
-            
-            if (insertError) {
-              console.warn('⚠️ Failed to create order_riders entries:', insertError.message);
-            } else {
-              console.log(`✅ Created ${insertedEntries?.length || riderOrderEntries.length} order_riders entries with full order details`);
-              
-              // Send notification emails to ALL riders
-              console.log('📧 Sending order notifications to all riders...');
+            // Send notification emails to ALL riders
+            if (!ridersError && allRiders && allRiders.length > 0) {
+              console.log(`📧 Sending order notifications to ${allRiders.length} riders...`);
               const emailPromises = allRiders.map((rider) =>
                 sendOrderNotificationToRider(
                   rider.name || 'Rider',
@@ -1090,13 +1086,13 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
               
               const results = await Promise.allSettled(emailPromises);
               const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
-              console.log(`📧 Order notifications sent to ${successCount}/${allRiders.length} riders`);
+              console.log(`✅ Order notifications sent to ${successCount}/${allRiders.length} riders`);
+            } else {
+              console.log('⚠️ No riders registered in the system');
             }
-          } else {
-            console.log('⚠️ No riders registered in the system');
           }
         } catch (riderOrderError) {
-          console.warn('⚠️ Error managing order_riders:', riderOrderError.message);
+          console.warn('⚠️ Error managing rider_orders:', riderOrderError.message);
         }
       }
       
@@ -2216,8 +2212,7 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
     const acceptedAt = new Date().toISOString();
     let updatePayload = {
       status: 'accepted',
-      accepted_by_rider_id: riderId,
-      accepted_at: acceptedAt,
+      rider_id: riderId,
       updated_at: acceptedAt
     };
 
@@ -2226,34 +2221,15 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
       .update(updatePayload)
       .eq('id', riderOrderId)
       .select()
-      .maybeSingle();
-
-    if (updateError && updateError.message?.includes('accepted_at')) {
-      console.warn('Retrying accept order without accepted_at due to schema cache issue');
-      updatePayload = {
-        status: 'accepted',
-        accepted_by_rider_id: riderId,
-        updated_at: acceptedAt
-      };
-
-      const retryResult = await supabase
-        .from('rider_orders')
-        .update(updatePayload)
-        .eq('id', riderOrderId)
-        .select()
-        .maybeSingle();
-
-      updatedOrder = retryResult.data;
-      updateError = retryResult.error;
-    }
+      .single();
 
     if (updateError) {
       console.error('Failed to accept order:', updateError.message);
-      return res.status(500).json({ error: 'Failed to accept order' });
+      return res.status(500).json({ error: 'Failed to accept order', detail: updateError.message });
     }
 
     if (!updatedOrder) {
-      return res.status(500).json({ error: 'Failed to accept order' });
+      return res.status(500).json({ error: 'Failed to accept order: No data returned' });
     }
 
     console.log(`✅ Rider ${riderId} accepted order ${updatedOrder.order_id}`);
