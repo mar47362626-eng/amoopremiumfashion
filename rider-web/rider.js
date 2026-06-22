@@ -377,7 +377,7 @@ function switchPage(pageName) {
 async function loadAvailableOrders() {
     try {
         const token = localStorage.getItem('riderToken');
-        // Fetch available orders from rider_orders table
+        // Fetch available orders from rider_order_table_2
         const response = await fetch(`${API_BASE}/api/rider-orders/available`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
