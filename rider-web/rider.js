@@ -808,7 +808,7 @@ async function loadCompletedDeliveries() {
 }
 
 function displayCompletedDeliveries() {
-    const container = document.getElementById('completedOrdersList');
+    const container = document.getElementById('completedList');
     if (!container) return;
     
     container.innerHTML = '';
@@ -1270,7 +1270,7 @@ async function verifyDeliveryCode() {
             showNotification('✅ Delivery completed! Confirmation emails sent.', 'success');
             
             await loadActiveDeliveries();
-            await loadCompletedOrders();
+            await loadCompletedDeliveries();
             updateDashboardStats();
         } else {
             const error = await response.json();
@@ -1282,89 +1282,6 @@ async function verifyDeliveryCode() {
     }
 }
 
-// ===== COMPLETED ORDERS =====
-async function loadCompletedOrders() {
-    try {
-        const riderId = localStorage.getItem('riderId');
-        const token = localStorage.getItem('riderToken');
-
-        // Fetch completed orders from delivery_orders table
-        const response = await fetch(`${API_BASE}/api/rider/${riderId}/completed-orders`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.ok) {
-            const completedOrderData = await response.json();
-            // Map completed delivery orders
-            const completedOrders = completedOrderData.map(ord => ({
-                id: ord.order_id || ord.id,
-                orderId: ord.order_id || ord.id,
-                riderOrderId: ord.id,
-                customerName: ord.customer_name || 'Unknown',
-                customerPhone: ord.customer_phone || 'N/A',
-                customerEmail: ord.customer_email || 'N/A',
-                items: (ord.order_items && Array.isArray(ord.order_items)) ? ord.order_items : [],
-                total: ord.order_total || 0,
-                address: ord.delivery_address || 'N/A',
-                city: ord.delivery_city || '',
-                state: ord.delivery_state || '',
-                distance: 0,
-                deliveredAt: ord.delivered_at,
-                status: 'delivered'
-            }));
-            displayCompletedOrders(completedOrders);
-        }
-    } catch (error) {
-        console.error('Error loading completed orders:', error);
-    }
-}
-
-function displayCompletedOrders(completedOrders) {
-    const container = document.getElementById('completedList');
-    container.innerHTML = '';
-
-    if (completedOrders.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 2rem; color: #666;">No completed deliveries</p>';
-        return;
-    }
-
-    completedOrders.forEach(order => {
-        const card = createCompletedOrderCard(order);
-        container.appendChild(card);
-    });
-}
-
-function createCompletedOrderCard(order) {
-    const card = document.createElement('div');
-    card.className = 'order-card';
-    card.style.borderLeftColor = '#28a745';
-    
-    const completedTime = order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString() : '-';
-    
-    card.innerHTML = `
-        <div class="order-header">
-            <span class="order-id">${order.id}</span>
-            <span class="order-status status-completed">✅ Completed</span>
-        </div>
-        <div class="order-customer">
-            <p class="customer-name">${order.customerName}</p>
-            <p class="customer-phone">${order.customerPhone}</p>
-        </div>
-        <div class="order-details-list">
-            <p><strong>Address:</strong> ${order.address}</p>
-            <p><strong>Completed at:</strong> ${completedTime}</p>
-        </div>
-        <div class="order-footer">
-            <span class="order-amount">₦${order.total.toLocaleString()}</span>
-        </div>
-    `;
-
-    return card;
-}
-
-function filterCompletedOrders(e) {
-    // Implementation for filtering by date
-}
 
 // ===== DASHBOARD =====
 function updateDashboardStats() {
