@@ -928,7 +928,7 @@ function openCodeVerificationModal(order) {
 function openDeliveryDetailModal(order) {
     // New modal for showing delivery details and requesting code
     currentOrder = order;
-    currentRiderOrderId = order.deliveryOrderId;
+    currentRiderOrderId = order.deliveryOrderId || order.riderOrderId;
     
     // Create modal
     let modal = document.getElementById('deliveryDetailModal');
