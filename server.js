@@ -2343,6 +2343,63 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
     }
 
     console.log(`✅ Rider ${riderId} accepted order ${riderOrder.order_id} - Created delivery record`);
+    
+    // Send admin notification email when order is accepted
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@amoostore.com';
+    const acceptedAdminEmailTemplate = {
+      subject: `📦 Order Accepted by Rider - Order #${riderOrder.order_id}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h2 style="color: #2196F3; margin-bottom: 20px;">📦 Order Accepted - Delivery in Progress</h2>
+            
+            <div style="background-color: #e3f2fd; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196F3;">
+              <h3 style="color: #1565c0; margin-top: 0;">Rider Information</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Name:</strong> ${riderInfo.name}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider ID:</strong> ${riderId}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Email:</strong> <a href="mailto:${riderInfo.email}" style="color: #2196F3;">${riderInfo.email}</a></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Phone:</strong> ${riderInfo.phone}</p>
+            </div>
+            
+            <div style="background-color: #f0f0f0; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #333; margin-top: 0;">Order Details</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Order ID:</strong> ${riderOrder.order_id}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Order Total:</strong> ₦${(riderOrder.order_total || 0).toLocaleString()}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Status:</strong> <span style="background-color: #2196F3; color: white; padding: 4px 8px; border-radius: 3px;">Accepted</span></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Accepted At:</strong> ${new Date(acceptedAt).toLocaleString()}</p>
+            </div>
+            
+            <div style="background-color: #fff3e0; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #e65100; margin-top: 0;">Customer Information</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Name:</strong> ${riderOrder.customer_name}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Email:</strong> <a href="mailto:${riderOrder.customer_email}" style="color: #ff6f00;">${riderOrder.customer_email}</a></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Phone:</strong> ${riderOrder.customer_phone}</p>
+            </div>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 5px 0; color: #666;"><strong>Delivery Address:</strong> ${riderOrder.delivery_address}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>City:</strong> ${riderOrder.delivery_city}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>State:</strong> ${riderOrder.delivery_state}</p>
+            </div>
+            
+            <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+              This is an automated notification. Please do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `Order Accepted by Rider!\n\nRider: ${riderInfo.name} (${riderId})\nEmail: ${riderInfo.email}\nPhone: ${riderInfo.phone}\n\nOrder ID: ${riderOrder.order_id}\nOrder Total: ₦${(riderOrder.order_total || 0).toLocaleString()}\nStatus: Accepted at ${new Date(acceptedAt).toLocaleString()}\n\nCustomer: ${riderOrder.customer_name}\nDelivery Address: ${riderOrder.delivery_address}, ${riderOrder.delivery_city}, ${riderOrder.delivery_state}`
+    };
+    
+    sendEmailViaBrevo(
+      adminEmail,
+      acceptedAdminEmailTemplate.subject,
+      acceptedAdminEmailTemplate.html,
+      acceptedAdminEmailTemplate.text
+    ).catch(err => console.warn('Failed to send admin notification for order acceptance:', err.message));
+    
+    console.log(`📧 Admin notified about order acceptance - Order ${riderOrder.order_id}`);
+    
     res.json({ success: true, message: 'Order accepted', order: deliveryOrder });
   } catch (error) {
     console.error('❌ Error accepting order:', {
@@ -2437,6 +2494,68 @@ app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
     );
     
     console.log(`✅ Delivery code sent to ${deliveryOrder.customer_email}: ${deliveryCode}`);
+    
+    // Send admin notification email when code is sent
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@amoostore.com';
+    const codeSentAdminEmailTemplate = {
+      subject: `🔐 Verification Code Sent - Order #${deliveryOrder.order_id}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h2 style="color: #FF9800; margin-bottom: 20px;">🔐 Verification Code Sent to Customer</h2>
+            
+            <div style="background-color: #fff3e0; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #FF9800;">
+              <h3 style="color: #e65100; margin-top: 0;">Code Details</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Verification Code:</strong> <span style="background-color: #FFE0B2; padding: 4px 8px; border-radius: 3px; font-weight: bold; font-size: 1.1em;">${deliveryCode}</span></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Code Sent At:</strong> ${new Date().toLocaleString()}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Sent To:</strong> <a href="mailto:${deliveryOrder.customer_email}" style="color: #FF9800;">${deliveryOrder.customer_email}</a></p>
+            </div>
+            
+            <div style="background-color: #f0f0f0; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #333; margin-top: 0;">Order Details</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Order ID:</strong> ${deliveryOrder.order_id}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Order Total:</strong> ₦${deliveryOrder.order_total.toLocaleString()}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Status:</strong> <span style="background-color: #FF9800; color: white; padding: 4px 8px; border-radius: 3px;">Code Sent</span></p>
+            </div>
+            
+            <div style="background-color: #e3f2fd; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196F3;">
+              <h3 style="color: #1565c0; margin-top: 0;">Rider Information</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Name:</strong> ${deliveryOrder.rider_name}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Email:</strong> <a href="mailto:${deliveryOrder.rider_email}" style="color: #2196F3;">${deliveryOrder.rider_email}</a></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Rider Phone:</strong> ${deliveryOrder.rider_phone}</p>
+            </div>
+            
+            <div style="background-color: #fff3e0; padding: 20px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #e65100; margin-top: 0;">Customer Information</h3>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Name:</strong> ${deliveryOrder.customer_name}</p>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Email:</strong> <a href="mailto:${deliveryOrder.customer_email}" style="color: #ff6f00;">${deliveryOrder.customer_email}</a></p>
+              <p style="margin: 8px 0; color: #333;"><strong>Customer Phone:</strong> ${deliveryOrder.customer_phone}</p>
+            </div>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 5px 0; color: #666;"><strong>Delivery Address:</strong> ${deliveryOrder.delivery_address}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>City:</strong> ${deliveryOrder.delivery_city}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>State:</strong> ${deliveryOrder.delivery_state}</p>
+            </div>
+            
+            <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+              This is an automated notification. Please do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `Verification Code Sent!\n\nCode: ${deliveryCode}\nSent At: ${new Date().toLocaleString()}\n\nOrder ID: ${deliveryOrder.order_id}\nOrder Total: ₦${deliveryOrder.order_total.toLocaleString()}\n\nRider: ${deliveryOrder.rider_name}\nEmail: ${deliveryOrder.rider_email}\nPhone: ${deliveryOrder.rider_phone}\n\nCustomer: ${deliveryOrder.customer_name}\nDelivery Address: ${deliveryOrder.delivery_address}, ${deliveryOrder.delivery_city}, ${deliveryOrder.delivery_state}`
+    };
+    
+    sendEmailViaBrevo(
+      adminEmail,
+      codeSentAdminEmailTemplate.subject,
+      codeSentAdminEmailTemplate.html,
+      codeSentAdminEmailTemplate.text
+    ).catch(err => console.warn('Failed to send admin notification for code sent:', err.message));
+    
+    console.log(`📧 Admin notified about code sent - Order ${deliveryOrder.order_id}`);
+    
     res.json({ success: true, message: 'Code sent to customer email', code: deliveryCode });
   } catch (error) {
     console.error('❌ Error sending delivery code:', error);
