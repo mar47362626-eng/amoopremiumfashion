@@ -535,6 +535,23 @@ function filterAvailableOrders(e) {
     });
 }
 
+function filterCompletedOrders(e) {
+    const searchTerm = e.target.value ? e.target.value.toLowerCase() : '';
+    const container = document.getElementById('completedList');
+    if (!container) return;
+    
+    const cards = container.querySelectorAll('.order-card');
+
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (searchTerm === '' || text.includes(searchTerm)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
 // ===== ORDER MODAL =====
 function openOrderModal(order) {
     currentOrder = order;
