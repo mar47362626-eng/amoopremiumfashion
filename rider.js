@@ -1039,11 +1039,20 @@ async function sendDeliveryCodeToCustomer() {
             return;
         }
 
+        // Extract delivery_orders ID from response
+        const acceptResult = await acceptResponse.json();
+        const deliveryOrderId = acceptResult.order?.id; // UUID from delivery_orders table
+        
+        if (!deliveryOrderId) {
+            showNotification('Failed to get delivery order ID', 'danger');
+            return;
+        }
+
         // Step 2: Generate and send code
         const deliveryCode = generateDeliveryCode();
         
         // Send code to backend - it will store in delivery_orders and send email
-        const response = await fetch(`${API_BASE}/api/rider-orders/${currentRiderOrderId}/send-code`, {
+        const response = await fetch(`${API_BASE}/api/rider-orders/${deliveryOrderId}/send-code`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
