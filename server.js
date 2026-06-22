@@ -1030,17 +1030,17 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       orders[orderIndex].status = status;
       writeJSON(ordersFilePath, orders);
       
-      // If status is "shipped", create ONE entry in rider_orders table (unassigned)
+      // If status is "shipped", create ONE entry in rider_order_table_2
       if (status === 'shipped') {
         try {
-          console.log('🏍️ Creating single rider_orders entry for available orders...');
+          console.log('🚚 Creating single entry in rider_order_table_2...');
           
           // Get ALL riders from Supabase to send notifications
           const { data: allRiders, error: ridersError } = await supabase
             .from('riders')
-            .select('*');
+            .select('id, name, email, phone, status');
           
-          // Create only ONE unassigned rider_orders entry
+          // Create only ONE unassigned order entry in rider_order_table_2
           const riderOrderEntry = {
             order_id: req.params.orderId,
             rider_id: null, // Unassigned - any rider can pick it up
@@ -1058,16 +1058,31 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
             updated_at: new Date().toISOString()
           };
           
-          // Insert single entry
+          // Insert single entry into new table
           const { data: insertedEntry, error: insertError } = await supabase
-            .from('rider_orders')
+            .from('rider_order_table_2')
             .insert([riderOrderEntry])
             .select();
           
           if (insertError) {
-            console.warn('⚠️ Failed to create rider_orders entry:', insertError.message);
+            console.warn('⚠️ Failed to create rider_order_table_2 entry:', insertError.message);
           } else {
-            console.log(`✅ Created 1 unassigned rider_orders entry for order ${req.params.orderId}`);
+            console.log(`✅ Created 1 entry in rider_order_table_2 for order ${req.params.orderId}`);
+            
+            const customerEmail = orders[orderIndex].customerEmail || orders[orderIndex].customer_email;
+            const customerName = orders[orderIndex].customerName || orders[orderIndex].customer_name;
+            
+            // Send email to CUSTOMER about order shipment
+            if (customerEmail) {
+              console.log('📧 Sending shipment confirmation to customer:', customerEmail);
+              sendOrderStatusUpdateEmail(
+                customerName || 'Customer',
+                customerEmail,
+                req.params.orderId,
+                'shipped',
+                orders[orderIndex].items || []
+              ).catch(error => console.warn('⚠️ Failed to notify customer:', error.message));
+            }
             
             // Send notification emails to ALL riders
             if (!ridersError && allRiders && allRiders.length > 0) {
@@ -1076,7 +1091,13 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
                 sendOrderNotificationToRider(
                   rider.name || 'Rider',
                   rider.email || rider.phone,
-                  orders[orderIndex],
+                  {
+                    id: req.params.orderId,
+                    customerName: customerName,
+                    address: orders[orderIndex].address,
+                    total: orders[orderIndex].total,
+                    items: orders[orderIndex].items
+                  },
                   rider.phone
                 ).catch(error => {
                   console.warn(`⚠️ Failed to notify rider ${rider.id}:`, error.message);
@@ -1092,7 +1113,7 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
             }
           }
         } catch (riderOrderError) {
-          console.warn('⚠️ Error managing rider_orders:', riderOrderError.message);
+          console.warn('⚠️ Error managing rider_order_table_2:', riderOrderError.message);
         }
       }
       
@@ -2088,11 +2109,11 @@ app.put('/api/order/:orderId/delivered', async (req, res) => {
 // GET Rider's Active Orders
 app.get('/api/rider/:riderId/active-orders', async (req, res) => {
   try {
-    // Fetch active orders for this rider from rider_orders table
+    // Fetch active orders for this rider from rider_order_table_2
     const { data: activeOrders, error } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .select('*')
-      .eq('accepted_by_rider_id', req.params.riderId)
+      .eq('rider_id', req.params.riderId)
       .in('status', ['accepted', 'on-way'])
       .order('accepted_at', { ascending: false });
     
@@ -2111,11 +2132,11 @@ app.get('/api/rider/:riderId/active-orders', async (req, res) => {
 // GET Rider's Completed Orders
 app.get('/api/rider/:riderId/completed-orders', async (req, res) => {
   try {
-    // Fetch completed orders for this rider from rider_orders table
+    // Fetch completed orders for this rider from rider_order_table_2
     const { data: completedOrders, error } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .select('*')
-      .eq('accepted_by_rider_id', req.params.riderId)
+      .eq('rider_id', req.params.riderId)
       .eq('status', 'delivered')
       .order('delivered_at', { ascending: false });
     
@@ -2131,14 +2152,14 @@ app.get('/api/rider/:riderId/completed-orders', async (req, res) => {
   }
 });
 
-// GET Available orders for riders from rider_orders table
+// GET Available orders for riders from rider_order_table_2
 app.get('/api/rider-orders/available', async (req, res) => {
   try {
-    console.log('📋 Fetching available orders from rider_orders table...');
+    console.log('📋 Fetching available orders from rider_order_table_2...');
     
-    // Fetch from Supabase rider_orders table where status is 'shipped'
+    // Fetch from Supabase rider_order_table_2 where status is 'shipped'
     const { data: availableOrders, error } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .select('*')
       .eq('status', 'shipped')
       .order('assigned_at', { ascending: false });
@@ -2148,7 +2169,7 @@ app.get('/api/rider-orders/available', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch available orders' });
     }
     
-    console.log(`✅ Fetched ${availableOrders?.length || 0} available orders from order_riders table`);
+    console.log(`✅ Fetched ${availableOrders?.length || 0} available orders from rider_order_table_2`);
     res.json(availableOrders || []);
   } catch (error) {
     console.error('❌ Error fetching available orders:', error);
@@ -2156,7 +2177,7 @@ app.get('/api/rider-orders/available', async (req, res) => {
   }
 });
 
-// POST Accept order (rider accepts the delivery)
+// POST Accept order (rider accepts the delivery from rider_order_table_2)
 app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
   try {
     let { riderOrderId } = req.params;
@@ -2170,55 +2191,46 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
       return res.status(400).json({ error: 'Rider ID is required' });
     }
 
-    // Ensure the rider order exists before updating
+    // Fetch from rider_order_table_2
     let { data: existingOrder, error: fetchError } = await supabase
-      .from('rider_orders')
-      .select('id, order_id, status')
+      .from('rider_order_table_2')
+      .select('id, order_id, status, rider_id')
       .eq('id', riderOrderId)
-      .maybeSingle();
+      .single();
 
-    if (fetchError) {
-      console.error('Failed to fetch rider order for accept:', fetchError.message);
-      return res.status(500).json({ error: 'Failed to accept order', detail: fetchError.message });
-    }
-
-    if (!existingOrder) {
+    if (fetchError || !existingOrder) {
+      // Try looking up by order_id if id doesn't work
       const lookupResult = await supabase
-        .from('rider_orders')
-        .select('id, order_id, status')
+        .from('rider_order_table_2')
+        .select('id, order_id, status, rider_id')
         .eq('order_id', riderOrderId)
-        .maybeSingle();
+        .single();
 
-      if (lookupResult.error) {
-        console.error('Failed to lookup rider order by order_id:', lookupResult.error.message);
-        return res.status(500).json({ error: 'Failed to accept order', detail: lookupResult.error.message });
+      if (lookupResult.error || !lookupResult.data) {
+        console.error('Rider order not found:', riderOrderId);
+        return res.status(404).json({ error: 'Order not found' });
       }
 
       existingOrder = lookupResult.data;
-      if (existingOrder) {
-        riderOrderId = existingOrder.id;
-      }
+      riderOrderId = existingOrder.id;
     }
 
-    if (!existingOrder) {
-      return res.status(404).json({ error: 'Rider order not found' });
-    }
-
-    // Prevent re-accepting an already accepted or delivered order
-    if (existingOrder.status && existingOrder.status !== 'shipped') {
-      return res.status(400).json({ error: 'Order cannot be accepted in its current status' });
+    // Check if already accepted by another rider
+    if (existingOrder.rider_id) {
+      return res.status(400).json({ error: 'This order has already been accepted by another rider' });
     }
 
     const acceptedAt = new Date().toISOString();
-    let updatePayload = {
-      status: 'accepted',
-      rider_id: riderId,
-      updated_at: acceptedAt
-    };
-
+    
+    // Update in rider_order_table_2
     let { data: updatedOrder, error: updateError } = await supabase
-      .from('rider_orders')
-      .update(updatePayload)
+      .from('rider_order_table_2')
+      .update({
+        status: 'accepted',
+        rider_id: riderId,
+        accepted_at: acceptedAt,
+        updated_at: acceptedAt
+      })
       .eq('id', riderOrderId)
       .select()
       .single();
@@ -2245,9 +2257,9 @@ app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
   try {
     const { riderOrderId } = req.params;
     
-    // Fetch rider order details
+    // Fetch rider order details from rider_order_table_2
     const { data: riderOrder, error: fetchError } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .select('*')
       .eq('id', riderOrderId)
       .single();
@@ -2259,9 +2271,9 @@ app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
     // Generate a 6-digit code
     const deliveryCode = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Store code in rider_orders table temporarily
+    // Store code in rider_order_table_2 temporarily
     const { error: updateError } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .update({ 
         delivery_code: deliveryCode,
         code_sent_at: new Date().toISOString()
@@ -2338,9 +2350,9 @@ app.post('/api/rider-orders/:riderOrderId/verify-code', async (req, res) => {
       return res.status(400).json({ error: 'Code is required' });
     }
     
-    // Fetch rider order
+    // Fetch rider order from rider_order_table_2
     const { data: riderOrder, error: fetchError } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .select('*')
       .eq('id', riderOrderId)
       .single();
@@ -2355,9 +2367,9 @@ app.post('/api/rider-orders/:riderOrderId/verify-code', async (req, res) => {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
     
-    // Update rider_orders status to delivered
+    // Update rider_order_table_2 status to delivered
     const { error: updateRiderOrderError } = await supabase
-      .from('rider_orders')
+      .from('rider_order_table_2')
       .update({ 
         status: 'delivered',
         delivered_at: new Date().toISOString(),
