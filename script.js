@@ -1,3 +1,5 @@
+console.log('📜 script.js loaded');
+
 let PRODUCTS = [
   {
     id: 'royal-agbada',
@@ -84,31 +86,45 @@ async function ensureSupabaseLibraryLoaded() {
     return window.supabase;
   }
 
-  console.log('⏳ Waiting for Supabase library from CDN...');
+  console.log('⏳ Checking for Supabase library from CDN...', {
+    windowSupabase: !!window.supabase,
+    hasCreateClient: !!window.supabase?.createClient
+  });
   
   // Wait for library to load from CDN
   let attempts = 0;
   while (!window.supabase?.createClient) {
     if (attempts > 80) {
       console.warn('⏳ Supabase CDN slow, loading dynamically...');
+      console.warn('Current state:', {
+        windowSupabase: !!window.supabase,
+        supabaseKeys: window.supabase ? Object.keys(window.supabase) : 'undefined'
+      });
+      
       // Try loading dynamically
       return new Promise((resolve) => {
+        console.log('📥 Injecting Supabase script dynamically...');
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        script.crossOrigin = 'anonymous';
         script.onload = () => {
           console.log('✅ Supabase library loaded dynamically');
           resolve(window.supabase);
         };
-        script.onerror = () => {
-          console.error('❌ Failed to load Supabase library dynamically');
+        script.onerror = (error) => {
+          console.error('❌ Failed to load Supabase library dynamically', error);
           resolve(null);
         };
         document.head.appendChild(script);
       });
     }
+    
     await new Promise(resolve => setTimeout(resolve, 50));
     attempts++;
-    if (attempts % 10 === 0) console.log(`⏳ Still waiting for Supabase library... (${attempts})`);
+    
+    if (attempts % 20 === 0) {
+      console.log(`⏳ CDN load progress: ${attempts * 50}ms, window.supabase:`, !!window.supabase);
+    }
   }
   
   console.log('✅ Supabase library loaded from CDN');
@@ -176,12 +192,17 @@ async function initializeSupabase() {
 
 // Initialize Supabase when DOM is ready
 if (document.readyState === 'loading') {
+  console.log('📜 script.js: DOM still loading, waiting for DOMContentLoaded...');
   document.addEventListener('DOMContentLoaded', () => {
+    console.log('📜 script.js: DOMContentLoaded fired, starting Supabase init...');
     supabaseInitPromise = initializeSupabase();
   });
 } else {
+  console.log('📜 script.js: DOM already loaded, starting Supabase init immediately...');
   supabaseInitPromise = initializeSupabase();
 }
+
+console.log('📜 script.js: Initialization setup complete');
 
 
 

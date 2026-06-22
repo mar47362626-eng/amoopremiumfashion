@@ -410,10 +410,30 @@
         </div>
     </div>
 
-    <!-- Supabase Client Library -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase Client Library - Try multiple CDN sources -->
+    <script>
+        console.log('📦 Attempting to load Supabase library...');
+        window.addEventListener('load', () => {
+            console.log('🔍 Window load event, checking window.supabase:', {
+                exists: !!window.supabase,
+                hasCreateClient: !!window.supabase?.createClient,
+                keys: window.supabase ? Object.keys(window.supabase) : 'undefined'
+            });
+        });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+    
+    <script>
+        // Log immediately after script tag
+        console.log('📦 After Supabase script tag:', {
+            exists: !!window.supabase,
+            hasCreateClient: !!window.supabase?.createClient,
+            type: typeof window.supabase
+        });
+    </script>
     
     <script src="/script.js"></script>
-    <script src="/rider-web/rider.js"></script>
+    <script src="/rider.js"></script>
 </body>
 </html>
