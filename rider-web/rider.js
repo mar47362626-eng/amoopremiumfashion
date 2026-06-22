@@ -1,7 +1,8 @@
 // ===== API BASE URL =====
-const API_BASE = 'https://amoostore.onrender.com';
+const API_BASE = 'https://amoo-store-user-i18d.onrender.com';
 
 // ===== RIDER DATA =====
+
 let riderData = null;
 let orders = [];
 let acceptedOrders = [];
