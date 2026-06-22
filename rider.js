@@ -76,8 +76,10 @@ function setupEventListeners() {
 
     // Delivery status modal
     bindEvent('updateStatusBtn', 'click', updateDeliveryStatus);
-    bindEvent('cancelStatusBtn', 'click', closeDeliveryModal);
-    bindEvent('status-arrived', 'change', showCodeSection);
+    const cancelStatusBtn = document.getElementById('cancelStatusBtn');
+    if (cancelStatusBtn) cancelStatusBtn.addEventListener('click', closeDeliveryModal);
+    const statusArrived = document.getElementById('status-arrived');
+    if (statusArrived) statusArrived.addEventListener('change', showCodeSection);
 
     // Code verification
     bindEvent('verifyCodeBtn', 'click', verifyDeliveryCode);
