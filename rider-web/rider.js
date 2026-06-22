@@ -509,6 +509,18 @@ function switchPage(pageName) {
     }
 
     document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
+    
+    // Load page-specific data
+    if (pageName === 'completed') {
+        console.log('📋 Loading delivery history page...');
+        loadCompletedDeliveries();
+    } else if (pageName === 'available-orders') {
+        console.log('📦 Loading available orders page...');
+        loadAvailableOrders();
+    } else if (pageName === 'dashboard') {
+        console.log('📊 Loading dashboard page...');
+        updateDashboardStats();
+    }
 }
 
 // ===== ORDERS =====
@@ -840,18 +852,24 @@ function rejectOrder() {
 // ===== DELIVERY HISTORY =====
 async function loadCompletedDeliveries() {
     try {
+        console.log('🔄 Starting loadCompletedDeliveries...');
+        
         const riderId = localStorage.getItem('riderId');
+        console.log('📋 Rider ID:', riderId);
         
         if (!riderId) {
-            console.error('No rider ID found');
+            console.error('❌ No rider ID found');
             return;
         }
 
         // Only attempt if Supabase is available
         if (!window.supabaseClient?.from) {
             console.warn('⚠️ Supabase not ready, skipping completed deliveries load');
+            document.getElementById('completedList').innerHTML = '<p style="text-align: center; padding: 2rem; color: #666;">Loading...</p>';
             return;
         }
+
+        console.log('📡 Fetching from Supabase delivery_orders table...');
 
         // Fetch completed deliveries from Supabase delivery_orders table
         const { data: completedRiderOrders, error } = await window.supabaseClient
@@ -861,8 +879,15 @@ async function loadCompletedDeliveries() {
             .eq('status', 'delivered')
             .order('delivered_at', { ascending: false });
 
+        console.log('📊 Query result:', {
+            dataCount: completedRiderOrders?.length || 0,
+            error: error?.message || 'none',
+            rawData: completedRiderOrders
+        });
+
         if (error) {
-            console.error('Error fetching completed deliveries from Supabase:', error);
+            console.error('❌ Error fetching completed deliveries from Supabase:', error);
+            document.getElementById('completedList').innerHTML = `<p style="text-align: center; padding: 2rem; color: red;">Error: ${error.message}</p>`;
             return;
         }
 
@@ -881,20 +906,28 @@ async function loadCompletedDeliveries() {
             status: 'delivered',
             deliveredAt: ord.delivered_at
         }));
+        
+        console.log(`✅ Mapped ${completedOrders.length} completed deliveries`);
         displayCompletedDeliveries();
         console.log(`✅ Loaded ${completedOrders.length} completed deliveries from Supabase`);
     } catch (error) {
-        console.error('Error loading completed deliveries:', error);
+        console.error('❌ Error loading completed deliveries:', error);
+        document.getElementById('completedList').innerHTML = `<p style="text-align: center; padding: 2rem; color: red;">Error: ${error.message}</p>`;
     }
 }
 
 function displayCompletedDeliveries() {
     const container = document.getElementById('completedList');
-    if (!container) return;
+    if (!container) {
+        console.error('❌ completedList element not found in DOM');
+        return;
+    }
     
+    console.log('🎨 Rendering completed deliveries:', completedOrders.length);
     container.innerHTML = '';
 
     if (completedOrders.length === 0) {
+        console.log('ℹ️ No completed deliveries to display');
         container.innerHTML = '<p style="text-align: center; padding: 2rem; color: #666;">No completed deliveries</p>';
         return;
     }
@@ -903,6 +936,8 @@ function displayCompletedDeliveries() {
         const card = createCompletedOrderCard(order);
         container.appendChild(card);
     });
+    
+    console.log('✅ Rendered all completed deliveries');
 }
 
 function createCompletedOrderCard(order) {
