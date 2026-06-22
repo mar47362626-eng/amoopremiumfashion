@@ -2292,41 +2292,58 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
 
     const acceptedAt = new Date().toISOString();
 
+    // Prepare delivery order data
+    const deliveryOrderData = {
+      order_id: riderOrder.order_id,
+      rider_id: riderId,
+      rider_name: riderInfo.name || 'Unknown',
+      rider_email: riderInfo.email || '',
+      rider_phone: riderInfo.phone || '',
+      customer_name: riderOrder.customer_name || 'Unknown',
+      customer_phone: riderOrder.customer_phone || '',
+      customer_email: riderOrder.customer_email || '',
+      delivery_address: riderOrder.delivery_address || '',
+      delivery_city: riderOrder.delivery_city || '',
+      delivery_state: riderOrder.delivery_state || '',
+      order_total: riderOrder.order_total || 0,
+      order_items: riderOrder.order_items || null,
+      status: 'accepted',
+      accepted_at: acceptedAt,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('📦 Creating delivery order with data:', JSON.stringify(deliveryOrderData, null, 2));
+
     // Create entry in delivery_orders table
     const { data: deliveryOrder, error: deliveryError } = await supabase
       .from('delivery_orders')
-      .insert([{
-        order_id: riderOrder.order_id,
-        rider_id: riderId,
-        rider_name: riderInfo.name,
-        rider_email: riderInfo.email,
-        rider_phone: riderInfo.phone,
-        customer_name: riderOrder.customer_name,
-        customer_phone: riderOrder.customer_phone,
-        customer_email: riderOrder.customer_email,
-        delivery_address: riderOrder.delivery_address,
-        delivery_city: riderOrder.delivery_city,
-        delivery_state: riderOrder.delivery_state,
-        order_total: riderOrder.order_total,
-        order_items: riderOrder.order_items,
-        status: 'accepted',
-        accepted_at: acceptedAt,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
+      .insert([deliveryOrderData])
       .select()
       .single();
 
     if (deliveryError) {
-      console.error('Failed to create delivery order:', deliveryError.message);
-      return res.status(500).json({ error: 'Failed to create delivery record', detail: deliveryError.message });
+      console.error('❌ Failed to create delivery order:', {
+        message: deliveryError.message,
+        code: deliveryError.code,
+        details: deliveryError.details,
+        hint: deliveryError.hint
+      });
+      return res.status(500).json({ 
+        error: 'Failed to create delivery record', 
+        detail: deliveryError.message,
+        code: deliveryError.code
+      });
     }
 
     console.log(`✅ Rider ${riderId} accepted order ${riderOrder.order_id} - Created delivery record`);
     res.json({ success: true, message: 'Order accepted', order: deliveryOrder });
   } catch (error) {
-    console.error('❌ Error accepting order:', error);
-    res.status(500).json({ error: 'Failed to accept order' });
+    console.error('❌ Error accepting order:', {
+      message: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to accept order', detail: error.message });
   }
 });
 
