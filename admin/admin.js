@@ -1,6 +1,34 @@
 const ADMIN_API = 'https://amoo-store-user-i18d.onrender.com';
 let adminSession = null;
 
+// Initialize Supabase Client
+async function initializeSupabase() {
+  try {
+    // Fetch config from backend
+    const response = await fetch(`${ADMIN_API}/api/config`);
+    if (response.ok) {
+      const { supabaseUrl, supabaseAnonKey } = await response.json();
+      
+      // Wait for Supabase library to be available
+      if (!window.supabase || !window.supabase.createClient) {
+        console.warn('⏳ Waiting for Supabase library to load...');
+        setTimeout(initializeSupabase, 500);
+        return;
+      }
+      
+      // Create Supabase client instance
+      window.supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      console.log('✅ Supabase client initialized in admin');
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize Supabase in admin:', error);
+  }
+}
+
+// Initialize Supabase when script loads
+initializeSupabase();
+
+
 // DOM Elements
 const authModal = document.getElementById('auth-modal');
 const registerModal = document.getElementById('register-modal');
@@ -908,6 +936,19 @@ async function loadRiders() {
 async function displayRiders(riders) {
   if (!riders || riders.length === 0) {
     document.getElementById('riders-list').innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No riders registered yet</p>';
+    return;
+  }
+
+  // Wait for Supabase to be initialized
+  let attempts = 0;
+  while (!window.supabase && attempts < 20) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    attempts++;
+  }
+
+  if (!window.supabase) {
+    console.error('❌ Supabase not initialized, cannot fetch completed orders');
+    document.getElementById('riders-list').innerHTML = '<p style="color: red;">❌ Unable to load rider data. Please refresh the page.</p>';
     return;
   }
 
