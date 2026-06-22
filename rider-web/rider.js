@@ -37,7 +37,15 @@ async function initializeRiderSupabase() {
         
         while (!window.supabaseClient?.from) {
             if (attempts > maxAttempts) {
-                console.warn(`⚠️ Supabase initialization timeout after ${maxAttempts * 100}ms`);
+                console.warn(`⚠️ Global init timeout after ${maxAttempts * 100}ms, trying direct initialization...`);
+                
+                // Fallback: Try direct initialization
+                const success = await initializeSupabaseDirectly();
+                if (success) {
+                    console.log('✅ Direct Supabase initialization succeeded');
+                    return true;
+                }
+                
                 console.warn('Client state:', {
                     supabaseClientExists: !!window.supabaseClient,
                     supabaseClientFrom: !!window.supabaseClient?.from,
@@ -59,6 +67,48 @@ async function initializeRiderSupabase() {
         return true;
     } catch (error) {
         console.error('❌ Supabase initialization failed:', error);
+        return false;
+    }
+}
+
+// Fallback: Direct Supabase initialization for rider
+async function initializeSupabaseDirectly() {
+    try {
+        console.log('🔄 Attempting direct Supabase initialization...');
+        
+        // Wait for library
+        let libAttempts = 0;
+        while (!window.supabase?.createClient) {
+            if (libAttempts > 30) {
+                console.error('❌ Supabase library not available');
+                return false;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+            libAttempts++;
+        }
+        
+        console.log('📡 Fetching config...');
+        const response = await fetch(`${API_BASE}/api/config`);
+        if (!response.ok) {
+            console.error(`❌ Config fetch failed: ${response.status}`);
+            return false;
+        }
+        
+        const { supabaseUrl, supabaseAnonKey } = await response.json();
+        if (!supabaseUrl || !supabaseAnonKey) {
+            console.error('❌ Invalid config response');
+            return false;
+        }
+        
+        console.log('🔧 Creating client...');
+        const { createClient } = window.supabase;
+        window.supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+        window.supabase.from = window.supabaseClient.from.bind(window.supabaseClient);
+        
+        console.log('✅ Direct initialization successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Direct initialization failed:', error);
         return false;
     }
 }
