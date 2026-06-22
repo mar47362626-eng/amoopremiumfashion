@@ -1069,12 +1069,13 @@ async function sendDeliveryCodeToCustomer() {
         if (response.ok) {
             const result = await response.json();
             currentDeliveryCode = deliveryCode; // Store for verification
+            currentRiderOrderId = deliveryOrderId; // Update to use delivery_orders ID for verification
             closeDeliveryDetailModal();
             showNotification('✉️ Delivery code sent to customer email!', 'success');
             
             // Show code verification modal after a short delay
             setTimeout(() => {
-                openCodeVerificationModal(currentOrder);
+                showCodeVerificationModal();
             }, 500);
         } else {
             const error = await response.json();
