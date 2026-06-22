@@ -18,8 +18,8 @@ async function fetchCustomerOrders() {
     const { data: orders, error } = await window.supabase
       .from('orders')
       .select('*')
-      .eq('customerEmail', accountProfile.email)
-      .order('createdAt', { ascending: false });
+      .eq('customer_email', accountProfile.email)
+      .order('created_at', { ascending: false });
     
     if (error) {
       console.error('❌ Error fetching orders from Supabase:', error);
@@ -39,16 +39,16 @@ async function fetchCustomerOrders() {
     const formattedOrders = orders.map(order => ({
       id: order.id,
       status: order.status || 'pending',
-      createdAt: order.createdAt,
-      customerName: order.customerName,
-      customerEmail: order.customerEmail,
+      createdAt: order.created_at,
+      customerName: order.customer_name,
+      customerEmail: order.customer_email,
       phone: order.phone,
       address: order.address,
       items: order.items || [],
       subtotal: order.subtotal || 0,
       delivery: order.delivery || 0,
       total: order.total || 0,
-      paymentMethod: order.paymentMethod || 'unknown'
+      paymentMethod: order.payment_method || 'unknown'
     }));
 
     ordersEmpty.setAttribute('hidden', '');
