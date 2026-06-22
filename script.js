@@ -81,15 +81,24 @@ async function initializeSupabase() {
     if (response.ok) {
       const { supabaseUrl, supabaseAnonKey } = await response.json();
       
-      // Wait for Supabase library to be available
-      if (!window.supabase || !window.supabase.createClient) {
+      // Check if Supabase module has createClient method
+      if (!window.supabase?.createClient) {
         console.warn('⏳ Waiting for Supabase library to load...');
         setTimeout(initializeSupabase, 500);
         return;
       }
       
-      // Create Supabase client instance
-      window.supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      // Create Supabase client instance and store it
+      const { createClient } = window.supabase;
+      window.supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+      
+      // Create a wrapper for backward compatibility
+      window.supabase = {
+        ...window.supabase,
+        from: window.supabaseClient.from.bind(window.supabaseClient),
+        select: window.supabaseClient.select?.bind(window.supabaseClient)
+      };
+      
       console.log('✅ Supabase client initialized');
     }
   } catch (error) {

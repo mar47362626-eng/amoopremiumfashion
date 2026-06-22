@@ -207,14 +207,16 @@ if (document.body.dataset.page === 'order') {
   // Wait for Supabase to be initialized
   async function waitForSupabase() {
     let attempts = 0;
-    while (!window.supabase && attempts < 20) {
+    while ((!window.supabase || !window.supabase.from) && attempts < 20) {
       await new Promise(resolve => setTimeout(resolve, 250));
       attempts++;
     }
-    if (window.supabase) {
+    if (window.supabase && typeof window.supabase.from === 'function') {
       fetchCustomerOrders();
     } else {
-      console.error('❌ Supabase client not initialized after waiting');
+      console.error('❌ Supabase client not properly initialized after waiting');
+      console.error('window.supabase:', window.supabase);
+      console.error('window.supabase.from:', window.supabase?.from);
     }
   }
   waitForSupabase();
