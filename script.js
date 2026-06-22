@@ -1,4 +1,9 @@
 console.log('📜 script.js loaded');
+console.log('🔍 Initial window.supabase check:', {
+  exists: !!window.supabase,
+  hasCreateClient: !!window.supabase?.createClient,
+  keys: window.supabase ? Object.keys(window.supabase) : 'not available'
+});
 
 let PRODUCTS = [
   {
