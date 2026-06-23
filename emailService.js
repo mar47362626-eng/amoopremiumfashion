@@ -525,7 +525,7 @@ async function sendAdminOrderNotification(recipientEmail, orderId, customerName,
         
         <hr style="border: 1px solid #ddd;">
         
-        <p><a href="https://amoostorefasthion.netlify.app/admin" style="background: #e74c3c; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">View in Admin Panel</a></p>
+        <p><a href="https://amoopremiumstore.netlify.app/admin" style="background: #e74c3c; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">View in Admin Panel</a></p>
         
         <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
       </div>
@@ -566,7 +566,7 @@ async function sendAdminMessageNotification(recipientEmail, senderName, messageC
         
         <hr style="border: 1px solid #ddd;">
         
-        <p><a href="https://amoo-store-user-i18d.onrender.com/admin" style="background: #3498db; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">Reply in Admin Panel</a></p>
+        <p><a href="https://amoopremiumstore.netlify.app/admin" style="background: #3498db; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">Reply in Admin Panel</a></p>
         
         <p style="color: #7f8c8d; font-size: 12px;">AMOO STORE | Premium Fashion Management</p>
       </div>
@@ -645,6 +645,8 @@ function getRiderOrderNotificationTemplate(riderName, order) {
             <p style="margin: 5px 0; color: #333;"><strong>📍 Action Required:</strong></p>
             <p style="margin: 5px 0; color: #555;">Log in to your rider dashboard to accept or decline this order.</p>
           </div>
+
+          <p><a href="https://amoopremiumstore.netlify.app/rider" style="background: #27ae60; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">Open Rider Dashboard</a></p>
           
           <p style="color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
             This is an automated order notification from Amoo Store. Please do not reply to this email.
