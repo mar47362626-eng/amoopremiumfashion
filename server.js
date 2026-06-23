@@ -95,6 +95,56 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// Test Supabase connection and tables
+app.get('/api/test-supabase', async (req, res) => {
+  try {
+    console.log('🧪 Testing Supabase connection...');
+    
+    // Test connection
+    const { data: testData, error: testError } = await supabase
+      .from('orders')
+      .select('count', { count: 'exact' })
+      .limit(1);
+    
+    if (testError) {
+      return res.json({
+        success: false,
+        status: '❌ Supabase connection failed',
+        error: testError.message,
+        details: testError,
+        fix: 'Run CREATE_ORDERS_TABLE.sql in Supabase SQL Editor'
+      });
+    }
+    
+    // Check if tables exist by querying them
+    const tables = {};
+    const tableNames = ['orders', 'order_items', 'payments', 'users'];
+    
+    for (const tableName of tableNames) {
+      const { count, error } = await supabase
+        .from(tableName)
+        .select('count', { count: 'exact' })
+        .limit(1);
+      
+      tables[tableName] = error ? `❌ ${error.message}` : `✅ Exists (${count} rows)`;
+    }
+    
+    res.json({
+      success: true,
+      status: '✅ Supabase connected',
+      tables: tables,
+      message: 'All tables are accessible'
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      status: '❌ Error testing Supabase',
+      error: error.message,
+      fix: 'Check SUPABASE_URL and SUPABASE_ANON_KEY in .env'
+    });
+  }
+});
+
 // File paths
 const userFilePath = path.join(__dirname, 'user.json');
 const productFilePath = path.join(__dirname, 'product.json');
@@ -204,9 +254,12 @@ async function syncProductToSupabase(product) {
 // Sync order to Supabase
 async function syncOrderToSupabase(order) {
   try {
+    console.log('📤 Starting Supabase sync for order:', order.id);
+    
     // First, ensure user exists (for foreign key relationship)
     if (order.customerEmail) {
-      await supabase
+      console.log('👤 Upserting user:', order.customerEmail);
+      const { error: userError } = await supabase
         .from('users')
         .upsert([
           {
@@ -216,9 +269,22 @@ async function syncOrderToSupabase(order) {
             address: order.address || null
           }
         ], { onConflict: 'email' });
+      
+      if (userError) {
+        console.warn('⚠️ User upsert warning (non-critical):', userError.message);
+      } else {
+        console.log('✅ User upserted:', order.customerEmail);
+      }
     }
 
     // Insert order
+    console.log('📦 Upserting order with data:', {
+      id: order.id,
+      customer_email: order.customerEmail,
+      total: order.total,
+      status: order.status || 'pending'
+    });
+    
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .upsert([
@@ -239,9 +305,17 @@ async function syncOrderToSupabase(order) {
       ], { onConflict: 'id' });
     
     if (orderError) {
-      console.error('❌ Error syncing order to Supabase:', orderError.message);
-      return;
+      console.error('❌ Error syncing order to Supabase - Details:', {
+        message: orderError.message,
+        code: orderError.code,
+        details: orderError.details,
+        hint: orderError.hint
+      });
+      console.error('⚠️ Order NOT saved to Supabase. Tables may not exist. Run CREATE_ORDERS_TABLE.sql');
+      return false;
     }
+    
+    console.log('✅ Order synced to Supabase:', order.id);
     
     // Insert order items
     if (order.items && order.items.length > 0) {
@@ -260,6 +334,7 @@ async function syncOrderToSupabase(order) {
       
       if (itemsError) {
         console.error('❌ Error syncing order items:', itemsError.message);
+        console.error('Order items error details:', itemsError);
       } else {
         console.log('✅ Order items synced:', orderItems.length);
       }
@@ -280,6 +355,7 @@ async function syncOrderToSupabase(order) {
     
     if (paymentError) {
       console.error('❌ Error syncing payment:', paymentError.message);
+      console.error('Payment error details:', paymentError);
     } else {
       console.log('✅ Payment record synced for order:', order.id);
     }
@@ -287,7 +363,8 @@ async function syncOrderToSupabase(order) {
     console.log('✅ Order fully synced to Supabase:', order.id);
     return true;
   } catch (error) {
-    console.error('❌ Supabase order sync error:', error);
+    console.error('❌ Supabase order sync CRITICAL error:', error.message || error);
+    console.error('Stack trace:', error.stack);
     return false;
   }
 }
@@ -873,12 +950,16 @@ app.post('/api/orders', async (req, res) => {
 
   orders.push(newOrder);
   if (writeJSON(ordersFilePath, orders)) {
+    console.log('💾 Order saved locally, now syncing to Supabase...');
     // Sync to Supabase and wait for the result
     let syncSuccess = false;
     try {
       syncSuccess = await syncOrderToSupabase(newOrder);
+      if (!syncSuccess) {
+        console.warn('⚠️ Supabase sync returned false - tables may not exist');
+      }
     } catch (syncError) {
-      console.error('❌ Supabase sync failed:', syncError);
+      console.error('❌ Supabase sync exception:', syncError.message);
     }
     
     // Send order confirmation email
