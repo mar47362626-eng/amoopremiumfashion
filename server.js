@@ -714,8 +714,11 @@ const adminUserFilePath = path.join(__dirname, 'admin.user.json');
 app.post('/api/admin/register', (req, res) => {
   const { name, email, password } = req.body;
 
+  console.log('📝 Admin registration request:', { name: name ? '✓' : '✗', email: email ? '✓' : '✗', password: password ? '✓' : '✗' });
+
   if (!name || !email || !password) {
-    return res.status(400).json({ error: 'All fields are required' });
+    console.warn('❌ Missing fields:', { name: !name, email: !email, password: !password });
+    return res.status(400).json({ error: 'All fields are required: name, email, password' });
   }
 
   const admins = readJSON(adminUserFilePath);
@@ -723,6 +726,7 @@ app.post('/api/admin/register', (req, res) => {
   // Check if admin already exists
   const adminExists = admins.some((a) => a.email === email);
   if (adminExists) {
+    console.warn(`❌ Admin already exists with email: ${email}`);
     return res.status(400).json({ error: 'Admin email already registered' });
   }
 
@@ -738,6 +742,7 @@ app.post('/api/admin/register', (req, res) => {
   admins.push(newAdmin);
 
   if (writeJSON(adminUserFilePath, admins)) {
+    console.log(`✅ Admin registered successfully: ${email}`);
     // Sync to Supabase
     syncAdminToSupabase(newAdmin);
     
@@ -747,6 +752,7 @@ app.post('/api/admin/register', (req, res) => {
     
     res.status(201).json({ success: true, message: 'Admin registered successfully', id: newAdmin.id });
   } else {
+    console.error('❌ Failed to write admin.user.json');
     res.status(500).json({ error: 'Failed to save admin data' });
   }
 });
@@ -755,16 +761,23 @@ app.post('/api/admin/register', (req, res) => {
 app.post('/api/admin/login', (req, res) => {
   const { email, password } = req.body;
 
+  console.log(`🔐 Admin login attempt: ${email || 'no-email'}`);
+
   if (!email || !password) {
+    console.warn('❌ Missing credentials');
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
   const admins = readJSON(adminUserFilePath);
+  console.log(`📊 Admin database has ${admins.length} records`);
+
   const admin = admins.find((a) => a.email === email && a.password === password);
 
   if (admin) {
+    console.log(`✅ Admin login successful: ${email}`);
     res.json({ success: true, message: 'Admin login successful', id: admin.id, name: admin.name });
   } else {
+    console.warn(`❌ Login failed: Email found: ${admins.some(a => a.email === email)}, Correct password: ${admins.some(a => a.email === email && a.password === password)}`);
     res.status(401).json({ error: 'Invalid email or password' });
   }
 });
@@ -773,6 +786,21 @@ app.post('/api/admin/login', (req, res) => {
 app.get('/api/admin/users', (req, res) => {
   const admins = readJSON(adminUserFilePath);
   res.json(admins);
+});
+
+// GET admin diagnostics (debug endpoint)
+app.get('/api/admin/diagnostics', (req, res) => {
+  const fileExists = fs.existsSync(adminUserFilePath);
+  const admins = fileExists ? readJSON(adminUserFilePath) : [];
+  
+  res.json({
+    status: 'ok',
+    adminUserFilePath: adminUserFilePath,
+    fileExists: fileExists,
+    adminCount: admins.length,
+    admins: admins.map(a => ({ id: a.id, name: a.name, email: a.email, createdAt: a.createdAt })),
+    serverTimestamp: new Date().toISOString()
+  });
 });
 
 // Orders management
@@ -2890,13 +2918,13 @@ app.post('/api/notify-riders-order', async (req, res) => {
       return res.json({ success: true, message: 'No online riders to notify', count: 0 });
     }
 
-// Create order_riders entries in Supabase for each online rider with full order details
+// Create ONE entry in rider_order_table_2 when order is shipped (unassigned for all riders to see)
       try {
-        console.log('📝 Creating order_riders entries in Supabase for all online riders...');
+        console.log('📝 Creating single entry in rider_order_table_2 for shipped order...');
       
-      const riderOrderEntries = onlineRiders.map((rider) => ({
+      const riderOrderEntry = {
         order_id: orderId,
-        rider_id: rider.id,
+        rider_id: null,  // Unassigned - no rider yet
         customer_name: order.customerName || order.customer_name || 'Unknown',
         customer_phone: order.phone || order.customer_phone || '',
         customer_email: order.customerEmail || order.customer_email || '',
@@ -2905,22 +2933,28 @@ app.post('/api/notify-riders-order', async (req, res) => {
         delivery_state: order.state || '',
         order_total: order.total || 0,
         order_items: order.items || [],
-        status: 'assigned',
+        status: 'shipped',  // Available for riders to pick up
         assigned_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }));
+      };
       
-      // Insert all entries into Supabase
-      const { data: insertedEntries, error: insertError } = await supabase
-        .from('rider_orders')
-        .insert(riderOrderEntries)
-        .select();
+      // Insert single entry into rider_order_table_2
+      const { data: insertedEntry, error: insertError } = await supabase
+        .from('rider_order_table_2')
+        .insert([riderOrderEntry])
+        .select()
+        .single();
       
       if (insertError) {
-        console.warn('⚠️ Failed to create rider_orders entries in Supabase:', insertError.message);
+        // Check if duplicate (order already shipped)
+        if (insertError.code === '23505' || insertError.message.includes('duplicate')) {
+          console.warn('⚠️ Order already in rider_order_table_2:', orderId);
+        } else {
+          console.warn('⚠️ Failed to create rider_order_table_2 entry in Supabase:', insertError.message);
+        }
       } else {
-        console.log(`✅ Created ${insertedEntries?.length || riderOrderEntries.length} rider_orders entries in Supabase with full order details`);
+        console.log(`✅ Created entry in rider_order_table_2 for order ${orderId} - now available for all riders`);
       }
     } catch (riderOrderError) {
       console.warn('⚠️ Error creating rider_orders entries:', riderOrderError.message);
@@ -3081,7 +3115,34 @@ app.post('/api/rider/:riderId/withdraw', async (req, res) => {
             <p>Your payment will be processed within 7 business days.</p>
           </div>
         `;
-        await sendEmailViaBrevo(rider.email, 'Withdrawal Request Confirmed', emailHTML);
+          await sendEmailViaBrevo(rider.email, 'Withdrawal Request Confirmed', emailHTML);
+
+          // Also notify admin about the withdrawal request
+          try {
+            const adminRecipient = 'ayomideoluniyi49@gmail.com';
+            const adminHTML = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>🔔 Rider Withdrawal Request</h2>
+                <p>A rider has requested a withdrawal — please review and process.</p>
+                <ul>
+                  <li><strong>Rider ID:</strong> ${riderId}</li>
+                  <li><strong>Rider Name:</strong> ${rider.name || 'N/A'}</li>
+                  <li><strong>Rider Email:</strong> ${rider.email || 'N/A'}</li>
+                  <li><strong>Amount:</strong> ₦${amount.toLocaleString()}</li>
+                  <li><strong>Bank:</strong> ${bankName}</li>
+                  <li><strong>Account Number:</strong> ${accountNumber}</li>
+                  <li><strong>Account Name:</strong> ${accountName}</li>
+                </ul>
+                <p>Requested at: ${new Date().toISOString()}</p>
+                <p><a href="/admin" style="display:inline-block;padding:8px 12px;background:#3498db;color:#fff;border-radius:4px;text-decoration:none;">Open Admin Panel</a></p>
+              </div>
+            `;
+
+            await sendEmailViaBrevo(adminRecipient, `🔔 Rider Withdrawal Request — ${rider.name || riderId}`, adminHTML);
+            console.log('✅ Admin notified about withdrawal request:', adminRecipient);
+          } catch (adminEmailErr) {
+            console.warn('⚠️ Failed to send withdrawal notification to admin:', adminEmailErr.message || adminEmailErr);
+          }
       }
     } catch (emailError) {
       console.warn('⚠️ Failed to send withdrawal confirmation email:', emailError.message);

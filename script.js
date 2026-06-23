@@ -196,15 +196,26 @@ async function initializeSupabase() {
 
 
 // Initialize Supabase when DOM is ready
+function startSupabaseInitialization() {
+  return initializeSupabase().then((result) => {
+    console.log('✅ Supabase initialization completed:', result);
+    window.supabaseInitialized = result;
+    return result;
+  }).catch((error) => {
+    console.error('❌ Supabase initialization error:', error);
+    return false;
+  });
+}
+
 if (document.readyState === 'loading') {
   console.log('📜 script.js: DOM still loading, waiting for DOMContentLoaded...');
   document.addEventListener('DOMContentLoaded', () => {
     console.log('📜 script.js: DOMContentLoaded fired, starting Supabase init...');
-    supabaseInitPromise = initializeSupabase();
+    supabaseInitPromise = startSupabaseInitialization();
   });
 } else {
   console.log('📜 script.js: DOM already loaded, starting Supabase init immediately...');
-  supabaseInitPromise = initializeSupabase();
+  supabaseInitPromise = startSupabaseInitialization();
 }
 
 console.log('📜 script.js: Initialization setup complete');
@@ -1138,8 +1149,8 @@ Please confirm my order. I will proceed with bank transfer payment.`;
 
       // attach payment confirmation handler
       const paymentConfirmedBtn = paymentInstructions?.querySelector('[data-payment-confirmed]');
-      if (paymentConfirmedBtn) {
-        paymentConfirmedBtn.addEventListener('click', () => {
+            if (paymentConfirmedBtn) {
+        paymentConfirmedBtn.addEventListener('click', async () => {
           // Calculate delivery date (7-9 business days from now)
           function calculateDeliveryDate() {
             const now = new Date();

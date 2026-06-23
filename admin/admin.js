@@ -66,6 +66,7 @@ const orderDetailsTitle = document.getElementById('order-details-title');
 const sidebarToggle = document.getElementById('sidebar-toggle');
 const sidebarOverlay = document.getElementById('sidebar-overlay');
 const adminSidebar = document.querySelector('.admin-sidebar');
+const analyticsContainer = document.querySelector('.analytics-container');
 
 let productsCache = [];
 let editingProductId = null;
@@ -162,6 +163,14 @@ async function handleLogin(e) {
   const email = formData.get('email');
   const password = formData.get('password');
 
+  // Debug: Log the form data being sent
+  console.log('🔐 Login attempt:', { email, password: '***' });
+
+  if (!email || !password) {
+    alert('Please enter both email and password');
+    return;
+  }
+
   try {
     const response = await fetch(`${ADMIN_API}/api/admin/login`, {
       method: 'POST',
@@ -170,6 +179,7 @@ async function handleLogin(e) {
     });
 
     const data = await response.json();
+    console.log(`📊 Login response status: ${response.status}`, data);
 
     if (response.ok) {
       adminSession = { email, name: data.name, id: data.id };
@@ -177,11 +187,12 @@ async function handleLogin(e) {
       adminLoginForm.reset();
       showDashboard();
     } else {
-      alert(data.error || 'Login failed');
+      console.error('❌ Login failed:', { status: response.status, error: data.error });
+      alert(`Login failed (${response.status}): ${data.error || 'Invalid email or password'}`);
     }
   } catch (error) {
-    console.error('Login error:', error);
-    alert('Connection error. Check if backend is running.');
+    console.error('❌ Login connection error:', error);
+    alert('Connection error. Check if backend is running at ' + ADMIN_API);
   }
 }
 
@@ -192,6 +203,19 @@ async function handleRegister(e) {
   const email = formData.get('email');
   const password = formData.get('password');
 
+  // Debug: Log the form data being sent
+  console.log('📝 Register attempt:', { name, email, password: '***' });
+
+  if (!name || !email || !password) {
+    alert('Please fill in all fields: name, email, and password');
+    return;
+  }
+
+  if (password.length < 6) {
+    alert('Password must be at least 6 characters');
+    return;
+  }
+
   try {
     const response = await fetch(`${ADMIN_API}/api/admin/register`, {
       method: 'POST',
@@ -200,6 +224,7 @@ async function handleRegister(e) {
     });
 
     const data = await response.json();
+    console.log(`📊 Register response status: ${response.status}`, data);
 
     if (response.ok) {
       document.getElementById('register-message').textContent = '✓ Account created! Please log in.';
@@ -210,11 +235,12 @@ async function handleRegister(e) {
         document.getElementById('register-message').textContent = '';
       }, 1500);
     } else {
-      alert(data.error || 'Registration failed');
+      console.error('❌ Register failed:', { status: response.status, error: data.error });
+      alert(`Registration failed (${response.status}): ${data.error || 'Unknown error'}`);
     }
   } catch (error) {
-    console.error('Register error:', error);
-    alert('Connection error. Check if backend is running.');
+    console.error('❌ Register connection error:', error);
+    alert('Connection error. Check if backend is running at ' + ADMIN_API);
   }
 }
 
@@ -279,6 +305,9 @@ async function loadPageData(page) {
     case 'inventory':
       await loadInventory();
       break;
+    case 'analytics':
+      await loadAnalytics();
+      break;
     case 'messages':
       await loadCustomers();
       break;
@@ -292,20 +321,150 @@ async function loadDashboard() {
   try {
     // Load products
     const productsRes = await fetch(`${ADMIN_API}/api/products`);
-    const products = await productsRes.json();
+    const products = productsRes.ok ? await productsRes.json() : [];
     document.getElementById('total-products').textContent = products.length;
 
     // Load users
     const usersRes = await fetch(`${ADMIN_API}/api/users`);
-    const users = await usersRes.json();
+    const users = usersRes.ok ? await usersRes.json() : [];
     document.getElementById('total-customers').textContent = users.length;
 
-    // Calculate revenue
-    let revenue = 0;
-    products.forEach((p) => (revenue += p.price));
+    // Load orders and revenue
+    const ordersRes = await fetch(`${ADMIN_API}/api/orders`);
+    const orders = ordersRes.ok ? await ordersRes.json() : [];
+    const totalOrders = Array.isArray(orders) ? orders.length : 0;
+    const revenue = Array.isArray(orders)
+      ? orders.reduce((sum, order) => sum + (Number(order.total) || 0), 0)
+      : 0;
+
+    document.getElementById('total-orders').textContent = totalOrders;
     document.getElementById('total-revenue').textContent = `NGN ${revenue.toLocaleString()}`;
   } catch (error) {
     console.error('Error loading dashboard:', error);
+  }
+}
+
+async function loadAnalytics() {
+  if (!analyticsContainer) return;
+
+  analyticsContainer.innerHTML = '<p>Loading analytics...</p>';
+
+  try {
+    const [ordersRes, productsRes, usersRes] = await Promise.all([
+      fetch(`${ADMIN_API}/api/orders`),
+      fetch(`${ADMIN_API}/api/products`),
+      fetch(`${ADMIN_API}/api/users`)
+    ]);
+
+    const orders = ordersRes.ok ? await ordersRes.json() : [];
+    const products = productsRes.ok ? await productsRes.json() : [];
+    const users = usersRes.ok ? await usersRes.json() : [];
+
+    const totalOrders = Array.isArray(orders) ? orders.length : 0;
+    const totalRevenue = Array.isArray(orders)
+      ? orders.reduce((sum, order) => sum + (Number(order.total) || 0), 0)
+      : 0;
+    const averageOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
+
+    const statusCounts = orders.reduce((counts, order) => {
+      const status = (order.status || 'pending').toLowerCase();
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    }, {});
+
+    const topProducts = {};
+    if (Array.isArray(orders)) {
+      orders.forEach((order) => {
+        if (Array.isArray(order.items)) {
+          order.items.forEach((item) => {
+            const name = item.productName || item.product_name || 'Unknown product';
+            const quantity = Number(item.quantity) || 0;
+            topProducts[name] = (topProducts[name] || 0) + quantity;
+          });
+        }
+      });
+    }
+
+    const topProductsList = Object.entries(topProducts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    const categoryCounts = products.reduce((counts, product) => {
+      const category = product.category || 'Uncategorized';
+      counts[category] = (counts[category] || 0) + 1;
+      return counts;
+    }, {});
+
+    const categoryList = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    analyticsContainer.innerHTML = `
+      <div class="analytics-grid">
+        <article class="stat-card">
+          <div class="stat-icon">📦</div>
+          <div class="stat-content">
+            <p class="stat-label">Total Orders</p>
+            <strong class="stat-value">${totalOrders}</strong>
+          </div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon">💰</div>
+          <div class="stat-content">
+            <p class="stat-label">Total Revenue</p>
+            <strong class="stat-value">NGN ${totalRevenue.toLocaleString()}</strong>
+          </div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon">📈</div>
+          <div class="stat-content">
+            <p class="stat-label">Average Order Value</p>
+            <strong class="stat-value">NGN ${averageOrderValue.toFixed(2)}</strong>
+          </div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <p class="stat-label">Total Customers</p>
+            <strong class="stat-value">${Array.isArray(users) ? users.length : 0}</strong>
+          </div>
+        </article>
+      </div>
+      <div class="analytics-section">
+        <h3>Order Status Breakdown</h3>
+        <div class="analytics-breakdown">
+          <div class="breakdown-item"><strong>${statusCounts.pending || 0}</strong><span>Pending</span></div>
+          <div class="breakdown-item"><strong>${statusCounts.accepted || 0}</strong><span>Accepted</span></div>
+          <div class="breakdown-item"><strong>${statusCounts.shipped || 0}</strong><span>Shipped</span></div>
+          <div class="breakdown-item"><strong>${statusCounts.delivered || 0}</strong><span>Delivered</span></div>
+        </div>
+      </div>
+      <div class="analytics-section">
+        <h3>Top Selling Products</h3>
+        <div class="top-products-list">
+          ${topProductsList.length > 0 ? topProductsList.map(([name, count], index) => `
+            <div class="top-product-item">
+              <span>${index + 1}. ${name}</span>
+              <strong>${count}</strong>
+            </div>
+          `).join('') : '<p>No product sales data available yet.</p>'}
+        </div>
+      </div>
+      <div class="analytics-section">
+        <h3>Active Product Categories</h3>
+        <div class="category-list">
+          ${categoryList.length > 0 ? categoryList.map(([category, count]) => `
+            <div class="category-item">
+              <span>${category}</span>
+              <strong>${count}</strong>
+            </div>
+          `).join('') : '<p>No categories found.</p>'}
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error loading analytics:', error);
+    analyticsContainer.innerHTML = '<p>Error loading analytics. Check backend connectivity.</p>';
   }
 }
 
@@ -465,37 +624,6 @@ async function saveProductChanges(event) {
   }
 }
 
-async function loadCustomers() {
-  try {
-    const response = await fetch(`${ADMIN_API}/api/users`);
-    const customers = await response.json();
-    const list = document.getElementById('customers-list');
-
-    if (customers.length === 0) {
-      list.innerHTML = '<p>No customers registered yet</p>';
-      return;
-    }
-
-    list.innerHTML = customers
-      .map(
-        (customer) => `
-      <div class="item-card">
-        <h3>${customer.name}</h3>
-        <div class="item-meta">
-          <span>📧 ${customer.email}</span>
-          <span>📱 ${customer.phone}</span>
-          <span>🌍 ${customer.country || 'N/A'}</span>
-        </div>
-      </div>
-    `
-      )
-      .join('');
-  } catch (error) {
-    console.error('Error loading customers:', error);
-    document.getElementById('customers-list').innerHTML = '<p>Error loading customers</p>';
-  }
-}
-
 async function loadOrders() {
   try {
     // Fetch orders from Supabase (latest data with status from admin)
@@ -542,6 +670,16 @@ function renderAdminOrderCard(order) {
     day: 'numeric'
   });
 
+  // Format delivery date
+  const deliveryDate = order.delivery_date || order.deliveryDate;
+  const formattedDeliveryDate = deliveryDate 
+    ? new Date(deliveryDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    : 'Not set';
+
   const customerName = order.customer_name || order.customerName || 'Customer';
   const customerEmail = order.customer_email || order.customerEmail || '';
   const phone = order.phone || '';
@@ -564,6 +702,9 @@ function renderAdminOrderCard(order) {
       </div>
       <div class="order-items-count">
         <strong>${itemCount}</strong> item${itemCount > 1 ? 's' : ''} - <strong>₦${total.toLocaleString()}</strong>
+      </div>
+      <div class="delivery-date-info" style="padding: 8px 0; border-top: 1px solid #e0e0e0; margin: 8px 0; font-size: 13px;">
+        <strong>📦 Est. Delivery:</strong> ${formattedDeliveryDate}
       </div>
       <div class="order-actions">
         <button class="btn btn-small btn-accept" onclick="updateOrderStatus(${order.id}, 'accepted')">✓ Accept</button>
@@ -686,6 +827,7 @@ function viewOrderDetails(orderId) {
         <p><strong>Date:</strong> ${createdDate}</p>
         <p><strong>Status:</strong> <span class="order-status-badge" data-status="${order.status}">${order.status.toUpperCase()}</span></p>
         <p><strong>Payment Method:</strong> ${order.paymentMethod === 'bank_transfer' ? 'Bank Transfer' : order.paymentMethod}</p>
+        ${order.delivery_date || order.deliveryDate ? `<p><strong>📦 Est. Delivery Date:</strong> ${new Date(order.delivery_date || order.deliveryDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
       </div>
       <div class="info-section">
         <h4>Customer Information</h4>

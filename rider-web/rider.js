@@ -416,17 +416,32 @@ async function loadRiderData() {
         const riderId = localStorage.getItem('riderId');
         const token = localStorage.getItem('riderToken');
 
+        if (!riderId || !token) {
+            console.warn('⚠️ No rider session found');
+            showRegistrationModal();
+            return;
+        }
+
         const response = await fetch(`${API_BASE}/api/rider/${riderId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
             riderData = await response.json();
+            console.log('✅ Rider data loaded:', riderData.name);
             loadRiderProfile();
             document.getElementById('registrationModal').classList.remove('show');
+            document.getElementById('loginModal').classList.remove('show');
+        } else {
+            const error = await response.json();
+            console.error('❌ Failed to load rider:', error);
+            showNotification('❌ Failed to load rider profile', 'error');
+            showRegistrationModal();
         }
     } catch (error) {
-        console.error('Error loading rider data:', error);
+        console.error('❌ Error loading rider data:', error);
+        showNotification('❌ Connection error while loading profile', 'error');
+        showRegistrationModal();
     }
 }
 
@@ -438,20 +453,23 @@ function loadRiderProfile() {
     document.getElementById('profileEmail').textContent = riderData.email;
     document.getElementById('profileRating').textContent = `${riderData.rating || 5} ⭐`;
     
-    // Fetch completed deliveries count from delivery_orders
-    fetchCompletedDeliveriesCount();
+    // Fetch completed deliveries count and calculate earnings from delivery_orders
+    fetchCompletedDeliveriesAndEarnings();
     
     document.getElementById('monthDeliveries').textContent = riderData.monthDeliveries || 0;
     document.getElementById('vehicleType').textContent = riderData.vehicleType;
     document.getElementById('licensePlate').textContent = riderData.licensePlate;
     document.getElementById('bankAccount').textContent = riderData.accountNumber ? `${riderData.bankName} - ${riderData.accountNumber}` : 'Not set';
     document.getElementById('joinDate').textContent = riderData.joinDate ? new Date(riderData.joinDate).toLocaleDateString() : 'Today';
-    document.getElementById('totalEarnings').textContent = `₦${(riderData.totalEarnings || 0).toLocaleString()}`;
-    document.getElementById('earningsValue').textContent = `₦${(riderData.monthEarnings || 0).toLocaleString()}`;
-}
+    document.getElementById('totalEarnings').textContent = `₦${(totalEarnings).toLocaleString()}`;
+    document.getElementById('earningsValue').textContent = `₦${(monthlyEarnings).toLocaleString()}`;
+  }
 
-// Fetch completed deliveries count from delivery_orders
-async function fetchCompletedDeliveriesCount() {
+// ===== EARNINGS FUNCTIONS =====
+const EARNINGS_PER_DELIVERY = 1000; // NGN 1000 per completed delivery
+
+// Fetch completed deliveries and calculate earnings from delivery_orders
+async function fetchCompletedDeliveriesAndEarnings() {
     try {
         const riderId = localStorage.getItem('riderId');
         if (!riderId) return;
@@ -463,31 +481,139 @@ async function fetchCompletedDeliveriesCount() {
             return;
         }
 
-        // Count completed deliveries from Supabase
-        const { count, error } = await window.supabaseClient
+        // Fetch all completed deliveries from Supabase
+        const { data: deliveries, error } = await window.supabaseClient
             .from('delivery_orders')
-            .select('*', { count: 'exact', head: true })
+            .select('id, status, created_at')
             .eq('rider_id', riderId)
-            .eq('status', 'delivered');
+            .eq('status', 'delivered')
+            .order('created_at', { ascending: false });
 
-        if (!error && count !== null) {
-            document.getElementById('totalDeliveries').textContent = count;
-            console.log(`✅ Completed deliveries: ${count}`);
-        } else {
+        if (error) {
             console.warn('Error fetching deliveries:', error);
             document.getElementById('totalDeliveries').textContent = riderData?.totalDeliveries || 0;
+            return;
         }
+
+        const totalDeliveries = deliveries?.length || 0;
+        totalEarnings = totalDeliveries * EARNINGS_PER_DELIVERY;
+
+        // Calculate this month's earnings
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const thisMonthDeliveries = deliveries?.filter(d => {
+            const deliveryDate = new Date(d.created_at);
+            return deliveryDate.getMonth() === currentMonth && deliveryDate.getFullYear() === currentYear;
+        }) || [];
+        
+        monthlyEarnings = thisMonthDeliveries.length * EARNINGS_PER_DELIVERY;
+
+        // Update UI
+        document.getElementById('totalDeliveries').textContent = totalDeliveries;
+        document.getElementById('totalEarnings').textContent = `₦${totalEarnings.toLocaleString()}`;
+        document.getElementById('earningsValue').textContent = `₦${monthlyEarnings.toLocaleString()}`;
+        
+        // Update sidebar earnings
+        const sidebarEarnings = document.getElementById('sidebarEarnings');
+        if (sidebarEarnings) {
+            sidebarEarnings.textContent = `₦${monthlyEarnings.toLocaleString()}`;
+        }
+
+        console.log(`✅ Completed deliveries: ${totalDeliveries} | This month: ${thisMonthDeliveries.length} | Total earnings: ₦${totalEarnings.toLocaleString()} | Monthly: ₦${monthlyEarnings.toLocaleString()}`);
     } catch (error) {
-        console.error('Error fetching completed deliveries count:', error);
+        console.error('Error calculating earnings:', error);
         document.getElementById('totalDeliveries').textContent = riderData?.totalDeliveries || 0;
     }
 }
+
+// Fetch completed deliveries count from delivery_orders (legacy, now using earnings function)
+async function fetchCompletedDeliveriesCount() {
+    await fetchCompletedDeliveriesAndEarnings();
+  }
 
 function editProfile() {
     showNotification('Profile editing feature coming soon', 'info');
 }
 
-// ===== NAVIGATION =====
+// ===== WITHDRAWAL FUNCTIONS =====
+function openWithdrawalModal() {
+    // Load bank details and earnings from rider data
+    document.getElementById('displayBankName').textContent = riderData?.bankName || 'Not set';
+    document.getElementById('displayAccountName').textContent = riderData?.accountName || 'Not set';
+    document.getElementById('displayAccountNumber').textContent = riderData?.accountNumber ? `****${riderData.accountNumber.slice(-4)}` : 'Not set';
+    document.getElementById('withdrawalAccount').value = riderData?.accountNumber || '';
+    
+    // Display total and monthly earnings
+    document.getElementById('totalEarningsDisplay').textContent = `₦${totalEarnings.toLocaleString()}`;
+    document.getElementById('monthEarningsDisplay').textContent = `₦${monthlyEarnings.toLocaleString()}`;
+    document.getElementById('completedOrdersDisplay').textContent = Math.floor(totalEarnings / EARNINGS_PER_DELIVERY);
+    
+    // Set max withdrawal amount
+    document.getElementById('withdrawalAmount').max = totalEarnings;
+    document.getElementById('withdrawalAmount').value = '';
+    
+    // Show modal
+    document.getElementById('withdrawalModal').classList.add('show');
+}
+
+function closeWithdrawalModal() {
+    document.getElementById('withdrawalModal').classList.remove('show');
+}
+
+function withdrawMaxAmount() {
+    document.getElementById('withdrawalAmount').value = totalEarnings;
+}
+
+async function submitWithdrawal() {
+    const amount = parseFloat(document.getElementById('withdrawalAmount').value);
+    
+    if (!amount || amount <= 0) {
+        showNotification('❌ Please enter a valid amount', 'error');
+        return;
+    }
+    
+    if (amount > totalEarnings) {
+        showNotification('❌ Insufficient balance', 'error');
+        return;
+    }
+    
+    if (amount < 1000) {
+        showNotification('❌ Minimum withdrawal is ₦1,000', 'error');
+        return;
+    }
+    
+    try {
+        const riderId = localStorage.getItem('riderId');
+        const accountNumber = document.getElementById('withdrawalAccount').value;
+        
+        const response = await fetch(`${API_BASE}/api/rider/${riderId}/withdraw`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                amount: amount,
+                accountNumber: accountNumber,
+                bankName: riderData?.bankName,
+                accountName: riderData?.accountName
+            })
+        });
+        
+        if (response.ok) {
+            showNotification(`✅ Withdrawal request submitted! ₦${amount.toLocaleString()} will be transferred within 24 hours.`, 'success');
+            closeWithdrawalModal();
+            // Reload earnings
+            fetchCompletedDeliveriesAndEarnings();
+        } else {
+            const error = await response.json();
+            showNotification(`❌ ${error.error || 'Withdrawal failed'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Withdrawal error:', error);
+        showNotification('❌ Connection error', 'error');
+    }
+}
+
+// ===== NAVIGATION ====="
 function handleNavigation(e) {
     e.preventDefault();
     const page = e.target.getAttribute('data-page');
