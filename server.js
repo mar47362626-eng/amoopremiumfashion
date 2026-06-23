@@ -12,6 +12,12 @@ const { sendRegistrationWhatsApp, sendOrderConfirmationWhatsApp, sendOrderStatus
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Admin notification emails (comma-separated in env) - fallback to two known addresses
+const ADMIN_NOTIFICATION_EMAILS = (process.env.ADMIN_NOTIFICATION_EMAILS || 'ayomideoluniyi49@gmail.com,amoostore5@gmail.com')
+  .split(',')
+  .map(e => e.trim())
+  .filter(Boolean);
+
 // Initialize Supabase client (prefer service_role key on server)
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -3238,7 +3244,7 @@ app.post('/api/rider/:riderId/withdraw', async (req, res) => {
 
           // Also notify admins about the withdrawal request (send to multiple recipients)
           try {
-            const adminRecipients = ['ayomideoluniyi49@gmail.com', 'amoostore5@gmail.com'];
+            const adminRecipients = ADMIN_NOTIFICATION_EMAILS;
             const adminHTML = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2>🔔 Rider Withdrawal Request</h2>
@@ -3277,6 +3283,53 @@ app.post('/api/rider/:riderId/withdraw', async (req, res) => {
   } catch (error) {
     console.error('❌ Withdrawal error:', error);
     res.status(500).json({ error: 'Failed to process withdrawal' });
+  }
+});
+
+// POST notify admins about a withdrawal (manual trigger)
+app.post('/api/notify-withdrawal', async (req, res) => {
+  const { riderId, amount, bankName, accountNumber, accountName } = req.body || {};
+  if (!riderId || !amount) {
+    return res.status(400).json({ error: 'riderId and amount are required' });
+  }
+
+  try {
+    const rider = readJSON(riderFilePath).find(r => r.id === riderId) || { name: 'Unknown', email: 'N/A' };
+
+    const adminHTML = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>🔔 Rider Withdrawal Request</h2>
+        <p>A rider has requested a withdrawal — please review and process.</p>
+        <ul>
+          <li><strong>Rider ID:</strong> ${riderId}</li>
+          <li><strong>Rider Name:</strong> ${rider.name || 'N/A'}</li>
+          <li><strong>Rider Email:</strong> ${rider.email || 'N/A'}</li>
+          <li><strong>Amount:</strong> ₦${Number(amount).toLocaleString()}</li>
+          <li><strong>Bank:</strong> ${bankName || 'N/A'}</li>
+          <li><strong>Account Number:</strong> ${accountNumber || 'N/A'}</li>
+          <li><strong>Account Name:</strong> ${accountName || 'N/A'}</li>
+        </ul>
+        <p>Requested at: ${new Date().toISOString()}</p>
+        <p><a href="/admin" style="display:inline-block;padding:8px 12px;background:#3498db;color:#fff;border-radius:4px;text-decoration:none;">Open Admin Panel</a></p>
+      </div>
+    `;
+
+    const results = [];
+    for (const adminEmail of ADMIN_NOTIFICATION_EMAILS) {
+      try {
+        await sendEmailViaBrevo(adminEmail, `🔔 Rider Withdrawal Request — ${rider.name || riderId}`, adminHTML);
+        results.push({ email: adminEmail, success: true });
+        console.log('✅ Admin notified about withdrawal request:', adminEmail);
+      } catch (err) {
+        console.warn('⚠️ Failed to notify admin:', adminEmail, err.message || err);
+        results.push({ email: adminEmail, success: false, error: err.message || String(err) });
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('❌ notify-withdrawal error:', error);
+    res.status(500).json({ error: 'Failed to notify admins' });
   }
 });
 
