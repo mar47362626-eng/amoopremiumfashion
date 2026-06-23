@@ -85,55 +85,77 @@ let supabaseInitPromise = null;
 let supabaseInitialized = false;
 
 async function ensureSupabaseLibraryLoaded() {
-  // If library is already loaded, resolve immediately
-  if (window.supabase?.createClient) {
+  if (window.supabase && typeof window.supabase.createClient === 'function') {
     console.log('✅ Supabase library already loaded');
     return window.supabase;
   }
 
-  console.log('⏳ Checking for Supabase library from CDN...', {
-    windowSupabase: !!window.supabase,
-    hasCreateClient: !!window.supabase?.createClient
+  console.log('⏳ Ensuring Supabase library is loaded (timeout 8000ms)...');
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const checkReady = () => {
+      if (window.supabase && typeof window.supabase.createClient === 'function') {
+        resolved = true;
+        console.log('✅ Supabase available on window');
+        resolve(window.supabase);
+        return true;
+      }
+      return false;
+    };
+
+    // Immediate check
+    if (checkReady()) return;
+
+    // If there's an existing script that looks like Supabase, attach listeners
+    const existing = [...document.scripts].find(s => s.src && s.src.includes('supabase'));
+    if (existing) {
+      existing.addEventListener('load', () => {
+        if (!resolved) checkReady();
+      });
+      existing.addEventListener('error', (e) => {
+        console.warn('⚠️ Existing Supabase script failed to load', e);
+      });
+    }
+
+    // Add CDN script if not present
+    if (!existing) {
+      console.log('📥 Injecting Supabase script dynamically...');
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        if (!resolved) checkReady();
+      };
+      script.onerror = (err) => {
+        console.error('❌ Failed to load Supabase script', err);
+      };
+      document.head.appendChild(script);
+    }
+
+    // Timeout + fallback
+    setTimeout(() => {
+      if (resolved) return;
+      console.warn('⏳ Supabase load timeout, attempting fallback injection...');
+      const fallback = document.createElement('script');
+      fallback.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js';
+      fallback.async = true;
+      fallback.crossOrigin = 'anonymous';
+      fallback.onload = () => {
+        if (!resolved) checkReady();
+      };
+      fallback.onerror = (err) => {
+        console.error('❌ Supabase fallback failed', err);
+        if (!resolved) resolve(null);
+      };
+      document.head.appendChild(fallback);
+    }, 8000);
+  }).catch((err) => {
+    console.error('❌ ensureSupabaseLibraryLoaded error:', err);
+    return null;
   });
-  
-  // Wait for library to load from CDN
-  let attempts = 0;
-  while (!window.supabase?.createClient) {
-    if (attempts > 80) {
-      console.warn('⏳ Supabase CDN slow, loading dynamically...');
-      console.warn('Current state:', {
-        windowSupabase: !!window.supabase,
-        supabaseKeys: window.supabase ? Object.keys(window.supabase) : 'undefined'
-      });
-      
-      // Try loading dynamically
-      return new Promise((resolve) => {
-        console.log('📥 Injecting Supabase script dynamically...');
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-        script.crossOrigin = 'anonymous';
-        script.onload = () => {
-          console.log('✅ Supabase library loaded dynamically');
-          resolve(window.supabase);
-        };
-        script.onerror = (error) => {
-          console.error('❌ Failed to load Supabase library dynamically', error);
-          resolve(null);
-        };
-        document.head.appendChild(script);
-      });
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 50));
-    attempts++;
-    
-    if (attempts % 20 === 0) {
-      console.log(`⏳ CDN load progress: ${attempts * 50}ms, window.supabase:`, !!window.supabase);
-    }
-  }
-  
-  console.log('✅ Supabase library loaded from CDN');
-  return window.supabase;
 }
 
 async function initializeSupabase() {
