@@ -848,6 +848,30 @@ function updateCartTotals() {
   // Debug: log when subtotal is zero to help trace missing product data
   if (subtotalValue === 0 && quantity > 0) {
     console.warn('🐞 Debug: subtotal is 0 but cart has items', { cartState, PRODUCTS });
+
+    // Try to fetch missing product details and recompute totals once they arrive
+    ensureProductsForCart().then(() => {
+      try {
+        const newSubtotal = cartSubtotalAmount();
+        const newDelivery = newSubtotal > 0 ? 3500 : 0;
+        const newTotal = newSubtotal + newDelivery;
+
+        if (newSubtotal !== subtotalValue) {
+          console.log('🔁 Recomputed totals after fetching missing products', { newSubtotal, newDelivery, newTotal });
+          if (cartSubtotal) cartSubtotal.textContent = currency.format(newSubtotal);
+          if (cartDelivery) cartDelivery.textContent = currency.format(newDelivery);
+          if (cartTotal) cartTotal.textContent = currency.format(newTotal);
+          // Also update checkout nodes if present
+          if (checkoutSubtotalNode) checkoutSubtotalNode.textContent = currency.format(newSubtotal);
+          if (checkoutDeliveryNode) checkoutDeliveryNode.textContent = currency.format(newDelivery);
+          if (checkoutTotalNode) checkoutTotalNode.textContent = currency.format(newTotal);
+        }
+      } catch (err) {
+        console.error('❌ Error recomputing totals after ensureProductsForCart', err);
+      }
+    }).catch((err) => {
+      console.error('❌ ensureProductsForCart failed when retrying totals', err);
+    });
   }
 
   cartCountNodes.forEach((node) => {
