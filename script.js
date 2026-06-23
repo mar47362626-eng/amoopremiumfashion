@@ -302,6 +302,14 @@ async function loadProductsFromBackend() {
 // Load products on page load
 loadProductsFromBackend();
 
+// Auto-refresh products every 30 seconds so new admin products appear without page refresh
+setInterval(() => {
+  if (document.querySelector('[data-page="shop"]')) {
+    console.log('🔄 Auto-refreshing products from backend...');
+    loadProductsFromBackend();
+  }
+}, 30000);
+
 const currency = new Intl.NumberFormat('en-NG', {
   style: 'currency',
   currency: 'NGN',
