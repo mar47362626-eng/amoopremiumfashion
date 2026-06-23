@@ -8,5 +8,4 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
+      # Render provides the service port at runtime via the $PORT env var; do not hard-code it here
