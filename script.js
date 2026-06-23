@@ -79,7 +79,29 @@ let PRODUCTS = [
     description: 'A clean everyday outfit that still keeps a premium and tidy look.',
     tag: 'Fresh'
   }
-];
+  ];
+
+function getCartAdvertItems() {
+  const cartItems = cartState
+    .map((item) => {
+      const product = getProduct(item.id);
+      if (!product) return null;
+      return {
+        ...product,
+        quantity: item.quantity,
+        advertSource: 'cart'
+      };
+    })
+    .filter(Boolean);
+
+  if (cartItems.length) return cartItems;
+
+  return cartAdProducts.map((product) => ({
+    ...product,
+    quantity: 1,
+    advertSource: 'featured'
+  }));
+}
 
 // Initialize Supabase Client
 let supabaseInitPromise = null;
