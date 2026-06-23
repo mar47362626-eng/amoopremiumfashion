@@ -747,71 +747,59 @@ function syncCartState() {
   cartState = loadCart();
 }
 
-function getCartAdvertItems() {
-  const cartItems = cartState
-    .map((item) => {
-      const product = getProduct(item.id);
-      if (!product) {
-        return null;
-      }
-
-      return {
-        ...product,
-        quantity: item.quantity,
-        advertSource: 'cart'
-      };
-    })
-    .filter(Boolean);
-
-  if (cartItems.length) {
-    return cartItems;
+async function updateCheckoutPage() {
+  if (!checkoutName || !checkoutEmail || !checkoutItemsList || !checkoutSubtotalNode || !checkoutDeliveryNode || !checkoutTotalNode) {
+    return;
   }
 
-  return cartAdProducts.map((product) => ({
-    ...product,
-    quantity: 1,
-    advertSource: 'featured'
-  }));
-}
+  syncCartState();
 
-function getProduct(productId) {
-  return PRODUCTS.find((product) => product.id === productId);
-}
+  // Ensure product details are loaded for checkout display
+  await ensureProductsForCart();
 
-// Ensure product details for items currently in cart are loaded into PRODUCTS
-async function ensureProductsForCart() {
-  const missingIds = cartState
-    .map(i => i.id)
-    .filter(id => !getProduct(id));
-
-  if (!missingIds.length) return;
-
-  const BACKEND = getBackendUrl();
-
-  for (const id of missingIds) {
-    try {
-      const resp = await fetch(`${BACKEND}/api/products/${encodeURIComponent(id)}`);
-      if (!resp.ok) {
-        console.warn('⚠️ ensureProductsForCart: product not found', id);
-        continue;
-      }
-      const p = await resp.json();
-      const product = {
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        price: Number(p.price) || 0,
-        image: p.image || p.image_url || '',
-        description: p.description,
-        tag: p.tag || 'Available'
-      };
-      PRODUCTS.push(product);
-      console.log('🔁 ensureProductsForCart: cached product', id);
-    } catch (err) {
-      console.error('❌ ensureProductsForCart error for', id, err);
-    }
+  if (!isSignedIn()) {
+    checkoutName.textContent = 'Not signed in';
+    checkoutEmail.textContent = 'Please login first';
+    checkoutItemsList.innerHTML = '<li class="checkout-item">Sign in and return to the cart to continue.</li>';
+    checkoutSubtotalNode.textContent = currency.format(0);
+    checkoutDeliveryNode.textContent = currency.format(0);
+    checkoutTotalNode.textContent = currency.format(0);
+    return;
   }
+
+  checkoutName.textContent = accountProfile.name || 'Customer';
+  checkoutEmail.textContent = accountProfile.email || '';
+
+  if (!cartState.length) {
+    checkoutItemsList.innerHTML = '<li class="checkout-item">Your cart is empty.</li>';
+    checkoutSubtotalNode.textContent = currency.format(0);
+    checkoutDeliveryNode.textContent = currency.format(0);
+    checkoutTotalNode.textContent = currency.format(0);
+    return;
+  }
+
+  checkoutItemsList.innerHTML = cartState.map((item) => {
+    const product = getProduct(item.id);
+    return `
+      <li class="checkout-item">
+        <img src="${product?.image || ''}" alt="${product?.name || ''}" loading="lazy" />
+        <div>
+          <strong>${product?.name || 'Unknown'}</strong>
+          <div>${item.quantity} x ${currency.format(product?.price || 0)}</div>
+        </div>
+      </li>
+    `;
+  }).join('');
+
+  const subtotalValue = cartSubtotalAmount();
+  const deliveryValue = subtotalValue > 0 ? 3500 : 0;
+  const totalValue = subtotalValue + deliveryValue;
+
+  checkoutSubtotalNode.textContent = currency.format(subtotalValue);
+  checkoutDeliveryNode.textContent = currency.format(deliveryValue);
+  checkoutTotalNode.textContent = currency.format(totalValue);
 }
+
 
 function cartQuantity() {
   return cartState.reduce((total, item) => total + item.quantity, 0);
