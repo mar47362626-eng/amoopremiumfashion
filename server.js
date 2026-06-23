@@ -3236,9 +3236,9 @@ app.post('/api/rider/:riderId/withdraw', async (req, res) => {
         `;
           await sendEmailViaBrevo(rider.email, 'Withdrawal Request Confirmed', emailHTML);
 
-          // Also notify admin about the withdrawal request
+          // Also notify admins about the withdrawal request (send to multiple recipients)
           try {
-            const adminRecipient = 'ayomideoluniyi49@gmail.com';
+            const adminRecipients = ['ayomideoluniyi49@gmail.com', 'amoostore5@gmail.com'];
             const adminHTML = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2>🔔 Rider Withdrawal Request</h2>
@@ -3257,10 +3257,16 @@ app.post('/api/rider/:riderId/withdraw', async (req, res) => {
               </div>
             `;
 
-            await sendEmailViaBrevo(adminRecipient, `🔔 Rider Withdrawal Request — ${rider.name || riderId}`, adminHTML);
-            console.log('✅ Admin notified about withdrawal request:', adminRecipient);
+            for (const adminRecipient of adminRecipients) {
+              try {
+                await sendEmailViaBrevo(adminRecipient, `🔔 Rider Withdrawal Request — ${rider.name || riderId}`, adminHTML);
+                console.log('✅ Admin notified about withdrawal request:', adminRecipient);
+              } catch (adminEmailErr) {
+                console.warn('⚠️ Failed to send withdrawal notification to admin:', adminRecipient, adminEmailErr.message || adminEmailErr);
+              }
+            }
           } catch (adminEmailErr) {
-            console.warn('⚠️ Failed to send withdrawal notification to admin:', adminEmailErr.message || adminEmailErr);
+            console.warn('⚠️ Failed to send withdrawal notifications to admins:', adminEmailErr.message || adminEmailErr);
           }
       }
     } catch (emailError) {
