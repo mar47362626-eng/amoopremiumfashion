@@ -920,7 +920,7 @@ function renderStoreProducts() {
   `).join('');
 }
 
-function renderCart() {
+async function renderCart() {
   syncCartState();
 
   if (!cartList || !cartEmpty) {
@@ -944,14 +944,45 @@ function renderCart() {
     clearCartButton.disabled = false;
   }
 
-  cartList.innerHTML = cartState.map((item) => {
-    const product = getProduct(item.id);
+  const htmlParts = [];
+
+  for (const item of cartState) {
+    let product = getProduct(item.id);
 
     if (!product) {
-      return '';
+      // Attempt to fetch product from backend if not present locally
+      try {
+        const BACKEND = getBackendUrl();
+        const resp = await fetch(`${BACKEND}/api/products/${encodeURIComponent(item.id)}`);
+        if (resp.ok) {
+          const p = await resp.json();
+          product = {
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            price: Number(p.price) || 0,
+            image: p.image || p.image_url || '',
+            description: p.description,
+            tag: p.tag || 'Available'
+          };
+          // Cache fetched product locally so subsequent renders find it
+          PRODUCTS.push(product);
+          console.log('🔁 Cached fetched product for cart:', product.id);
+        } else {
+          console.warn('⚠️ Product not found on backend for cart item:', item.id);
+        }
+      } catch (err) {
+        console.error('❌ Error fetching product for cart:', item.id, err);
+      }
     }
 
-    return `
+    if (!product) {
+      // If still missing, skip rendering this item but keep cart intact
+      htmlParts.push('');
+      continue;
+    }
+
+    htmlParts.push(`
       <li class="cart-item">
         <img src="${product.image}" alt="${product.name}" loading="lazy" />
         <div>
@@ -965,8 +996,10 @@ function renderCart() {
           </div>
         </div>
       </li>
-    `;
-  }).join('');
+    `);
+  }
+
+  cartList.innerHTML = htmlParts.join('');
 
   updateCartTotals();
   saveCart();
@@ -1017,7 +1050,11 @@ function advanceCartAdvert() {
 }
 
 function addToCart(productId) {
+  console.log('🛒 addToCart called with productId:', productId);
+  console.log('👤 User signed in?', isSignedIn());
+  
   if (!isSignedIn()) {
+    console.log('❌ User not signed in. Opening login modal...');
     if (accountStatus) {
       accountStatus.textContent = 'Please log in or register before adding items to your cart.';
     }
@@ -1025,12 +1062,15 @@ function addToCart(productId) {
     return;
   }
 
+  console.log('✅ User is signed in. Adding to cart...');
   const existingItem = cartState.find((item) => item.id === productId);
 
   if (existingItem) {
     existingItem.quantity += 1;
+    console.log('📦 Increased quantity of existing item');
   } else {
     cartState.push({ id: productId, quantity: 1 });
+    console.log('✅ Added new item to cart');
   }
 
   saveCart();
@@ -1096,7 +1136,8 @@ if (storeGrid) {
     if (!button) {
       return;
     }
-
+    
+    console.log('🛒 Add to cart clicked for product:', button.dataset.addToCart);
     addToCart(button.dataset.addToCart);
   });
 
