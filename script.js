@@ -801,6 +801,10 @@ async function updateCheckoutPage() {
 }
 
 
+function getProduct(productId) {
+  return PRODUCTS.find((p) => p.id === productId);
+}
+
 function cartQuantity() {
   return cartState.reduce((total, item) => total + item.quantity, 0);
 }
