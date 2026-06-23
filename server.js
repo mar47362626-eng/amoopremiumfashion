@@ -2469,34 +2469,68 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
 
     console.log('📦 Creating delivery order with data:', JSON.stringify(deliveryOrderData, null, 2));
 
-    // Create entry in delivery_orders table
-    const { data: deliveryOrder, error: deliveryError } = await supabase
+    // Check if delivery order already exists for this order
+    const { data: existingDeliveryOrder, error: existingDeliveryError } = await supabase
       .from('delivery_orders')
-      .insert([deliveryOrderData])
-      .select()
-      .single();
+      .select('*')
+      .eq('order_id', riderOrder.order_id)
+      .maybeSingle();
 
-    if (deliveryError) {
-      // Check if it's a duplicate key error
-      if (deliveryError.code === '23505' || deliveryError.message.includes('duplicate')) {
-        console.warn('⚠️ Order already accepted by another rider:', riderOrder.order_id);
-        return res.status(400).json({ error: 'This order has already been accepted' });
-      }
-      
-      console.error('❌ Failed to create delivery order:', {
-        message: deliveryError.message,
-        code: deliveryError.code,
-        details: deliveryError.details,
-        hint: deliveryError.hint
-      });
-      return res.status(500).json({ 
-        error: 'Failed to create delivery record', 
-        detail: deliveryError.message,
-        code: deliveryError.code
-      });
+    let deliveryOrder = existingDeliveryOrder;
+    if (existingDeliveryError && existingDeliveryError.message) {
+      console.warn('⚠️ Could not verify existing delivery order:', existingDeliveryError.message);
     }
 
-    console.log(`✅ Rider ${riderId} accepted order ${riderOrder.order_id} - Created delivery record`);
+    if (deliveryOrder) {
+      if (deliveryOrder.rider_id && deliveryOrder.rider_id !== riderId) {
+        return res.status(400).json({ error: 'This order has already been accepted by another rider' });
+      }
+      console.log(`ℹ️ Delivery order already exists for order ${riderOrder.order_id}. Reusing existing record.`);
+    } else {
+      // Create entry in delivery_orders table
+      const { data: insertedDeliveryOrder, error: deliveryError } = await supabase
+        .from('delivery_orders')
+        .insert([deliveryOrderData])
+        .select()
+        .single();
+
+      if (deliveryError) {
+        // Check if it's a duplicate key error
+        if (deliveryError.code === '23505' || deliveryError.message.includes('duplicate')) {
+          console.warn('⚠️ Order already accepted by another rider:', riderOrder.order_id);
+          return res.status(400).json({ error: 'This order has already been accepted' });
+        }
+        
+        console.error('❌ Failed to create delivery order:', {
+          message: deliveryError.message,
+          code: deliveryError.code,
+          details: deliveryError.details,
+          hint: deliveryError.hint
+        });
+        return res.status(500).json({ 
+          error: 'Failed to create delivery record', 
+          detail: deliveryError.message,
+          code: deliveryError.code
+        });
+      }
+
+      deliveryOrder = insertedDeliveryOrder;
+      console.log(`✅ Rider ${riderId} accepted order ${riderOrder.order_id} - Created delivery record`);
+    }
+
+    // Update the rider_order_table_2 row to mark it as accepted by this rider
+    try {
+      const { error: updateRiderOrderError } = await supabase
+        .from('rider_order_table_2')
+        .update({ rider_id: riderId, status: 'accepted', updated_at: new Date().toISOString() })
+        .eq('id', riderOrderId);
+
+      if (updateRiderOrderError) {
+        console.warn('⚠️ Failed to update rider_order_table_2 assignment:', updateRiderOrderError.message);
+      }
+    } catch (updateError) {
+      console.warn('⚠️ Error updating rider_order_table_2 assignment:', updateError.message);
+    }
     
     // Send admin notification email when order is accepted
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@amoostore.com';
@@ -2568,6 +2602,7 @@ app.post('/api/rider-orders/:riderOrderId/accept', async (req, res) => {
 app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
   try {
     const { riderOrderId } = req.params;
+    const { code: providedCode } = req.body;
     
     // Fetch from delivery_orders table
     const { data: deliveryOrder, error: fetchError } = await supabase
@@ -2580,8 +2615,10 @@ app.post('/api/rider-orders/:riderOrderId/send-code', async (req, res) => {
       return res.status(404).json({ error: 'Delivery order not found' });
     }
     
-    // Generate a 6-digit code
-    const deliveryCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Use provided code if any, otherwise generate a new 6-digit code
+    const deliveryCode = providedCode && providedCode.toString().trim().length === 6
+      ? providedCode.toString().trim()
+      : Math.floor(100000 + Math.random() * 900000).toString();
     
     // Update delivery_orders with code and status
     const { error: updateError } = await supabase

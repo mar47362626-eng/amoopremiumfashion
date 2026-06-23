@@ -1,4 +1,4 @@
-const ADMIN_API = '';
+const ADMIN_API = window.BACKEND_URL || 'https://amoopremiumfashion.onrender.com';
 let adminSession = null;
 
 // Initialize Supabase Client

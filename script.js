@@ -1,3 +1,4 @@
+window.BACKEND_URL = window.BACKEND_URL || 'https://amoopremiumfashion.onrender.com';
 console.log('📜 script.js loaded');
 console.log('🔍 Initial window.supabase check:', {
   exists: !!window.supabase,
