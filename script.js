@@ -778,6 +778,41 @@ function getProduct(productId) {
   return PRODUCTS.find((product) => product.id === productId);
 }
 
+// Ensure product details for items currently in cart are loaded into PRODUCTS
+async function ensureProductsForCart() {
+  const missingIds = cartState
+    .map(i => i.id)
+    .filter(id => !getProduct(id));
+
+  if (!missingIds.length) return;
+
+  const BACKEND = getBackendUrl();
+
+  for (const id of missingIds) {
+    try {
+      const resp = await fetch(`${BACKEND}/api/products/${encodeURIComponent(id)}`);
+      if (!resp.ok) {
+        console.warn('⚠️ ensureProductsForCart: product not found', id);
+        continue;
+      }
+      const p = await resp.json();
+      const product = {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        price: Number(p.price) || 0,
+        image: p.image || p.image_url || '',
+        description: p.description,
+        tag: p.tag || 'Available'
+      };
+      PRODUCTS.push(product);
+      console.log('🔁 ensureProductsForCart: cached product', id);
+    } catch (err) {
+      console.error('❌ ensureProductsForCart error for', id, err);
+    }
+  }
+}
+
 function cartQuantity() {
   return cartState.reduce((total, item) => total + item.quantity, 0);
 }
@@ -1348,6 +1383,8 @@ Please confirm my order. I will proceed with bank transfer payment.`;
 
           // Create and save order
           const deliveryDate = calculateDeliveryDate();
+          // Ensure product details are loaded for cart items (so prices are available)
+          await ensureProductsForCart();
           const subtotal = cartSubtotalAmount();
           const deliveryFee = subtotal > 0 ? 3500 : 0;
           const total = subtotal + deliveryFee;
