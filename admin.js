@@ -1,4 +1,4 @@
-const ADMIN_API = 'https://amoo-store-user-i18d.onrender.com';
+const ADMIN_API = '';
 let adminSession = null;
 
 // Initialize Supabase Client
@@ -766,33 +766,47 @@ function viewOrderDetails(orderId) {
 
   orderDetailsTitle.textContent = `Order #${order.id}`;
   
-  const createdDate = new Date(order.createdAt).toLocaleDateString('en-US', {
+  const createdDate = new Date(order.created_at || order.createdAt || Date.now()).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
   });
 
-  let itemsHTML = order.items.map(item => {
-    // Try to get image: first from stored productImage, then try to fetch product data
-    let imageUrl = item.productImage || '';
-    const imageHtml = imageUrl 
-      ? `<img src="${imageUrl}" alt="${item.productName}" class="item-image" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%2312192d%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2240%22 text-anchor=%22middle%22 dy=%22.3em%22%3E📦%3C/text%3E%3C/svg%3E'">` 
-      : `<div class="item-image-placeholder">📦</div>`;
+  const orderItems = Array.isArray(order.items)
+    ? order.items
+    : Array.isArray(order.order_items)
+      ? order.order_items
+      : [];
 
-    return `
+  let itemsHTML;
+  if (orderItems.length > 0) {
+    itemsHTML = orderItems.map(item => {
+      const imageUrl = item.productImage || item.image || item.productImageUrl || '';
+      const itemName = item.productName || item.name || item.product_name || 'Item';
+      const quantity = item.quantity ?? item.qty ?? 1;
+      const unitPrice = item.price ?? item.unit_price ?? 0;
+      const totalPrice = item.total ?? unitPrice * quantity;
+      const imageHtml = imageUrl
+        ? `<img src="${imageUrl}" alt="${itemName}" class="item-image" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%2312192d%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2240%22 text-anchor=%22middle%22 dy=%22.3em%22%3E📦%3C/text%3E%3C/svg%3E'">`
+        : '<div class="item-image-placeholder">📦</div>';
+
+      return `
       <div class="order-detail-item">
         <div class="item-image-container">
-          ${imageUrl ? imageHtml : '<div class="item-image-placeholder">📦</div>'}
+          ${imageHtml}
         </div>
         <div class="item-details">
-          <strong>${item.productName}</strong>
-          <p class="item-quantity">Quantity: ${item.quantity}</p>
-          <p class="item-price">₦${item.price.toLocaleString()} each</p>
-          <p class="item-total">Total: ₦${(item.price * item.quantity).toLocaleString()}</p>
+          <strong>${itemName}</strong>
+          <p class="item-quantity">Quantity: ${quantity}</p>
+          <p class="item-price">₦${unitPrice.toLocaleString()} each</p>
+          <p class="item-total">Total: ₦${totalPrice.toLocaleString()}</p>
         </div>
       </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+  } else {
+    itemsHTML = '<div class="order-detail-empty">No item details available for this order.</div>';
+  }
 
   orderDetailsContent.innerHTML = `
     <div class="order-info-grid">

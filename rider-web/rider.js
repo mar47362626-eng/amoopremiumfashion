@@ -1,5 +1,5 @@
 // ===== API BASE URL =====
-const API_BASE = 'https://amoo-store-user-i18d.onrender.com';
+const API_BASE = '';
 
 // ===== RIDER DATA =====
 

@@ -172,7 +172,7 @@ async function initializeSupabase() {
     console.log('📡 Fetching Supabase config from backend...');
     
     // Fetch config from backend
-    const response = await fetch('https://amoo-store-user-i18d.onrender.com/api/config', {
+    const response = await fetch('/api/config', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -249,7 +249,7 @@ async function loadProductsFromBackend() {
   if (document.querySelector('[data-page="shop"]')) {
     try {
       console.log('🛍️ Fetching products from Supabase...');
-      const response = await fetch('https://amoo-store-user-i18d.onrender.com/api/products');
+      const response = await fetch('/api/products');
       if (response.ok) {
         PRODUCTS = await response.json();
         console.log(`✅ Loaded ${PRODUCTS.length} products from Supabase`);
@@ -1270,7 +1270,7 @@ Please confirm my order. I will proceed with bank transfer payment.`;
               total: order.total
             });
             
-            const response = await fetch('https://amoo-store-user-i18d.onrender.com/api/orders', {
+            const response = await fetch('/api/orders', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(order)

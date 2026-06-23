@@ -12,9 +12,9 @@ const { sendRegistrationWhatsApp, sendOrderConfirmationWhatsApp, sendOrderStatus
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Supabase client
+// Initialize Supabase client (prefer service_role key on server)
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Log Supabase connection status
@@ -317,7 +317,7 @@ async function syncOrderToSupabase(order) {
     
     console.log('✅ Order synced to Supabase:', order.id);
     
-    // Insert order items
+    // Insert order items (use insert to avoid accidental upsert duplicates)
     if (order.items && order.items.length > 0) {
       const orderItems = order.items.map(item => ({
         order_id: order.id,
@@ -325,39 +325,40 @@ async function syncOrderToSupabase(order) {
         product_name: item.productName,
         quantity: item.quantity,
         price: item.price,
-        product_image_url: item.productImage || ''
+        product_image_url: item.productImage || '',
+        created_at: new Date().toISOString()
       }));
-      
-      const { error: itemsError } = await supabase
+
+      const { data: itemsData, error: itemsError } = await supabase
         .from('order_items')
-        .upsert(orderItems);
-      
+        .insert(orderItems);
+
       if (itemsError) {
-        console.error('❌ Error syncing order items:', itemsError.message);
+        console.error('❌ Error inserting order items:', itemsError.message);
         console.error('Order items error details:', itemsError);
       } else {
-        console.log('✅ Order items synced:', orderItems.length);
+        console.log('✅ Order items inserted:', (itemsData || []).length);
       }
     }
-    
+
     // Insert payment record
-    const { error: paymentError } = await supabase
+    const paymentRecord = {
+      order_id: order.id,
+      amount: order.total,
+      payment_method: order.paymentMethod || 'bank_transfer',
+      payment_status: order.status === 'paid' ? 'completed' : 'pending',
+      created_at: order.createdAt || new Date().toISOString()
+    };
+
+    const { data: paymentData, error: paymentError } = await supabase
       .from('payments')
-      .upsert([
-        {
-          order_id: order.id,
-          amount: order.total,
-          payment_method: order.paymentMethod || 'bank_transfer',
-          payment_status: order.status === 'paid' ? 'completed' : 'pending',
-          created_at: order.createdAt
-        }
-      ]);
-    
+      .insert([paymentRecord]);
+
     if (paymentError) {
-      console.error('❌ Error syncing payment:', paymentError.message);
+      console.error('❌ Error inserting payment:', paymentError.message);
       console.error('Payment error details:', paymentError);
     } else {
-      console.log('✅ Payment record synced for order:', order.id);
+      console.log('✅ Payment record inserted for order:', order.id);
     }
     
     console.log('✅ Order fully synced to Supabase:', order.id);
