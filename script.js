@@ -845,6 +845,11 @@ function updateCartTotals() {
   const deliveryValue = subtotalValue > 0 ? 3500 : 0;
   const totalValue = subtotalValue + deliveryValue;
 
+  // Debug: log when subtotal is zero to help trace missing product data
+  if (subtotalValue === 0 && quantity > 0) {
+    console.warn('🐞 Debug: subtotal is 0 but cart has items', { cartState, PRODUCTS });
+  }
+
   cartCountNodes.forEach((node) => {
     node.textContent = String(quantity);
     // Show red badge if cart has items, hide if empty
@@ -877,13 +882,55 @@ function updateCartTotals() {
     }
   }
 }
+// Ensure products referenced in the cart are present in the local PRODUCTS cache
+async function ensureProductsForCart() {
+  try {
+    syncCartState();
+    const missing = cartState
+      .map(i => i.id)
+      .filter(id => !getProduct(id));
 
-function updateCheckoutPage() {
+    if (!missing.length) return;
+
+    const BACKEND = getBackendUrl();
+    for (const id of missing) {
+      try {
+        const resp = await fetch(`${BACKEND}/api/products/${encodeURIComponent(id)}`);
+        if (!resp.ok) {
+          console.warn('⚠️ ensureProductsForCart: product not found', id, resp.status);
+          continue;
+        }
+        const p = await resp.json();
+        const product = {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          price: Number(p.price) || 0,
+          image: p.image || p.image_url || '',
+          description: p.description,
+          tag: p.tag || 'Available'
+        };
+        PRODUCTS.push(product);
+        console.log('🔁 ensureProductsForCart: cached product', product.id);
+      } catch (err) {
+        console.error('❌ ensureProductsForCart fetch error for', id, err);
+      }
+    }
+  } catch (err) {
+    console.error('❌ ensureProductsForCart unexpected error:', err);
+  }
+}
+
+// Unified async checkout updater that ensures product data is available first
+async function updateCheckoutPage() {
   if (!checkoutName || !checkoutEmail || !checkoutItemsList || !checkoutSubtotalNode || !checkoutDeliveryNode || !checkoutTotalNode) {
     return;
   }
 
   syncCartState();
+
+  // Ensure product details are loaded before rendering totals
+  await ensureProductsForCart();
 
   if (!isSignedIn()) {
     checkoutName.textContent = 'Not signed in';
@@ -936,6 +983,11 @@ function updateCheckoutPage() {
   const subtotalValue = cartSubtotalAmount();
   const deliveryValue = subtotalValue > 0 ? 3500 : 0;
   const totalValue = subtotalValue + deliveryValue;
+
+  // Debug log when totals are unexpectedly zero
+  if (subtotalValue === 0 && cartState.length > 0) {
+    console.warn('🧾 Debug: checkout subtotal is 0 despite cart items', { cartState, PRODUCTS });
+  }
 
   checkoutSubtotalNode.textContent = currency.format(subtotalValue);
   checkoutDeliveryNode.textContent = currency.format(deliveryValue);
