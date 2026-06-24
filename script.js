@@ -1174,6 +1174,53 @@ function advanceCartAdvert() {
   renderCartAdvert();
 }
 
+// Cart Notification Toast Functions
+let cartNotificationTimeout = null;
+
+function showCartNotification(productName) {
+  const toastElement = document.getElementById('cartNotificationToast');
+  const toastMessage = document.getElementById('toastMessage');
+  
+  if (!toastElement || !toastMessage) {
+    console.warn('⚠️ Cart notification elements not found');
+    return;
+  }
+
+  // Update message with product name
+  toastMessage.textContent = `✓ Added "${productName}" to cart`;
+
+  // Clear any existing timeout
+  if (cartNotificationTimeout) {
+    clearTimeout(cartNotificationTimeout);
+  }
+
+  // Show the notification
+  toastElement.classList.add('show');
+  toastElement.setAttribute('aria-hidden', 'false');
+
+  // Auto-hide after 4 seconds
+  cartNotificationTimeout = setTimeout(() => {
+    closeCartNotification();
+  }, 4000);
+}
+
+function closeCartNotification() {
+  const toastElement = document.getElementById('cartNotificationToast');
+  
+  if (!toastElement) {
+    return;
+  }
+
+  toastElement.classList.remove('show');
+  toastElement.setAttribute('aria-hidden', 'true');
+
+  // Clear timeout if exists
+  if (cartNotificationTimeout) {
+    clearTimeout(cartNotificationTimeout);
+    cartNotificationTimeout = null;
+  }
+}
+
 function addToCart(productId) {
   console.log('🛒 addToCart called with productId:', productId);
   console.log('👤 User signed in?', isSignedIn());
@@ -1200,6 +1247,12 @@ function addToCart(productId) {
 
   saveCart();
   renderCart();
+
+  // Show cart notification with product name
+  const product = getProduct(productId);
+  if (product) {
+    showCartNotification(product.name);
+  }
 }
 
 function changeCartItem(productId, action) {
@@ -1362,7 +1415,7 @@ if (document.body.dataset.page === 'checkout') {
 
     function renderPaymentPreview() {
       if (!paymentPreview) return;
-      paymentPreview.innerHTML = `<strong>Bank transfer selected</strong><div style="margin-top:6px">Account: <strong>oluniyi A A</strong><br/>Bank: <strong>FCMB</strong><br/>Account number: <strong>0275987178</strong></div>`;
+      paymentPreview.innerHTML = `<strong>Bank transfer selected</strong><div style="margin-top:6px">Account: <strong>OLUNIYI A A</strong><br/>Bank: <strong>WEMA</strong><br/>Account number: <strong>0275987178</strong></div>`;
       paymentPreview.setAttribute('aria-hidden', 'false');
     }
 
@@ -1414,8 +1467,8 @@ Please confirm my order. I will proceed with bank transfer payment.`;
         paymentInstructions.innerHTML = `
           <div class="bank-details">
             <strong>Bank transfer instructions</strong>
-            <div><strong>Account name:</strong> oluniyi A A</div>
-            <div><strong>Bank:</strong> FCMB</div>
+            <div><strong>Account name:</strong> OLUNIYI A A</div>
+            <div><strong>Bank:</strong> WEMA</div>
             <div><strong>Account number:</strong> 0275987178</div>
             <div><strong>Branch code:</strong> 050</div>
             <div>Please keep your payment proof and contact us with a photo or reference after transfer.</div>

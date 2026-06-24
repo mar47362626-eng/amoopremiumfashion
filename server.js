@@ -1664,8 +1664,9 @@ app.put('/api/rider/:riderId/status', async (req, res) => {
 
 app.post('/api/rider/register', async (req, res) => {
   const { name, email, phone, password, vehicleType, licensePlate, bankName, accountNumber, accountName } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-  if (!name || !email || !phone || !password || !vehicleType || !licensePlate || !bankName || !accountNumber || !accountName) {
+  if (!name || !normalizedEmail || !phone || !password || !vehicleType || !licensePlate || !bankName || !accountNumber || !accountName) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
@@ -1674,7 +1675,7 @@ app.post('/api/rider/register', async (req, res) => {
     const { data: existingRiders, error: checkError } = await supabase
       .from('riders')
       .select('email')
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (checkError) {
       console.warn('⚠️ Supabase check failed, using JSON fallback:', checkError.message);
@@ -1686,7 +1687,7 @@ app.post('/api/rider/register', async (req, res) => {
     const newRider = {
       id: riderId,
       name,
-      email,
+      email: normalizedEmail,
       phone,
       password_hash: password, // In production, use bcrypt
       vehicle_type: vehicleType,
@@ -1769,15 +1770,49 @@ app.post('/api/rider/register', async (req, res) => {
 });
 
 // POST Rider Login
-app.post('/api/rider/login', (req, res) => {
+app.post('/api/rider/login', async (req, res) => {
   const { email, password } = req.body;
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  // First try Supabase if available
+  try {
+    const { data: supabaseRiders, error: supabaseError } = await supabase
+      .from('riders')
+      .select('id, name, email, phone, password_hash')
+      .eq('email', normalizedEmail)
+      .limit(1);
+
+    if (supabaseError) {
+      console.warn('⚠️ Supabase rider login check failed, falling back to JSON:', supabaseError.message);
+    } else if (supabaseRiders && supabaseRiders.length > 0) {
+      const rider = supabaseRiders[0];
+      if (rider.password_hash === password) {
+        const token = rider.id + '_' + Date.now();
+        return res.json({
+          success: true,
+          message: 'Login successful',
+          riderId: rider.id,
+          token: token,
+          name: rider.name,
+          email: rider.email
+        });
+      }
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+  } catch (error) {
+    console.warn('⚠️ Supabase rider login failed, falling back to JSON:', error.message);
+  }
+
+  // Fallback to local JSON file
   const riders = readJSON(riderFilePath);
-  const rider = riders.find((r) => r.email === email && r.password === password);
+  const rider = riders.find((r) =>
+    r.email && r.email.toLowerCase() === normalizedEmail &&
+    (r.password === password || r.password_hash === password)
+  );
 
   if (rider) {
     const token = rider.id + '_' + Date.now();

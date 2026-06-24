@@ -16,6 +16,16 @@
   <div class="bg-orb orb-2"></div>
   <div class="bg-grid"></div>
 
+  <!-- Cart Notification Toast -->
+  <div class="cart-notification-toast" id="cartNotificationToast" role="status" aria-live="polite" aria-hidden="true">
+    <span class="toast-icon">✓</span>
+    <div class="toast-content">
+      <p class="toast-message" id="toastMessage">Added to cart</p>
+      <p class="toast-hint">Check your menu for cart on mobile</p>
+    </div>
+    <button class="toast-close" type="button" aria-label="Close notification" onclick="closeCartNotification()">×</button>
+  </div>
+
   <header class="site-header">
     <a class="brand" href="#home" aria-label="AMOO STORE home">
       <span class="brand-mark">👔</span>

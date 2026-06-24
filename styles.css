@@ -2522,3 +2522,111 @@ p {
     align-items: stretch;
   }
 }
+
+/* Cart Notification Toast Styles */
+.cart-notification-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(121, 209, 195, 0.95), rgba(58, 180, 160, 0.95));
+  border: 1px solid rgba(121, 209, 195, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+  max-width: 90%;
+  pointer-events: auto;
+}
+
+.cart-notification-toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.cart-notification-toast[aria-hidden="false"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.toast-content {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.toast-message {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.toast-hint {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.toast-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+@media (max-width: 640px) {
+  .cart-notification-toast {
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    transform: translateX(0);
+  }
+
+  .cart-notification-toast.show {
+    transform: translateX(0) translateY(0);
+  }
+
+  .toast-message {
+    font-size: 0.9rem;
+  }
+
+  .toast-hint {
+    font-size: 0.8rem;
+  }
+}
